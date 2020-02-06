@@ -1,0 +1,29 @@
+{
+    "data": [
+        {
+            "id": "nodemcu-8266",
+            "list": [
+                "esp-8266-001",
+                "esp-8266-002",
+                "esp-8266-003"
+            ],
+            "type": "ESP"
+        },
+        {
+            "id": "raspberries",
+            "list": [
+                "rpi-3b-001",
+                "rpi-3b-002",
+                "rpi-0w-001"
+            ],
+            "type": "RPi"
+        },
+        {
+            "id": "cluster_test_xxx",
+            "list": [
+                "test_device001"
+            ],
+            "type": null
+        }
+    ]
+}
