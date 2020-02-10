@@ -1,0 +1,7 @@
+This file'
+
+purpose is to just test
+
+the functionality
+
+of the UFTP server and client
