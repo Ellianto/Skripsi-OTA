@@ -1,6 +1,5 @@
 from pathlib import Path
 from subprocess import PIPE
-import os
 import psutil
 import json
 
@@ -23,8 +22,8 @@ curr_dir = Path(__file__).parent.absolute()
 
 base_dir = curr_dir / 'data'
 
-status_file = base_dir / 'status.txt'
-log_file = base_dir / 'uftp_server_logfile.txt'
+status_file = curr_dir / 'uftp' / 'status.txt'
+log_file = curr_dir / 'uftp' / 'uftp_server_logfile.txt'
 
 path_to_uftp_server_exe = curr_dir / 'uftp' / 'uftp.exe'
 
@@ -41,66 +40,15 @@ uftp_server_commands = [str(path_to_uftp_server_exe),
                         '-R', transfer_rate,
                         '-E', str(base_dir),  # Base directory for the sent files, relevant only for subdirectory management in the client side
                         '-S', str(status_file),   # Output for persable STATUS File, can be used to confirm the file transfer process' result. Only relevant in SYNC MODE
-                        '-L', str(log_file)  # The log file output. If undefined, UFTP manual defaults to printing logs to stderr
+                        '-L', str(log_file),  # The log file output. If undefined, UFTP manual defaults to printing logs to stderr
                         '-g', max_log_size,
                         '-n', max_log_count,
                         '-p', port_number,  # The port number the server will be listening from
                         '-M', pub_multicast_addr,  # The Initial Public Multicast Address for the ANNOUNCE phase
                         '-P', prv_multicast_addr,  # The Private Multicast Address for FILE TRANSFER phase
-                        '-H']  # List of comma separated target client IDs, enclosed in "" (0x prefix optional)
-
-def check_failed_gateway_connect(connect_ids, gateway_ids):
-    failed_gateways = [conn[2] for conn in connect_ids if conn[1] = 'failed']
-    any_failed = len(failed_gateways) > 0
-
-    if any_failed:
-        print('Some gateways failed to connect to UFTP Session!')
-        print('Failed gateways : ')
-
-        for failed_gateway in failed_gateways:
-            print('-> ' + failed_gateway)
-
-    return any_failed
+                        '-H']  # List of comma separated target client IDs, enclosed in "" if more than one (0x prefix optional)
 
 
-def parse_lines(lines):
-    connect_arr = []
-    results = {}
-    stats_arr = []
-    h_stats_arr = []
-    failed_gateways = {
-        'conn_failed': [],
-        'rejected': [],
-        'lost': []
-    }
-
-    for line in lines:
-        if line[0] == 'CONNECT':
-            if line[2] == 'success':
-                connect_arr.append(line)
-            elif line[2] == 'failed':
-                failed_gateways['conn_failed'].append(line[2])
-        elif line[0] == 'RESULT':
-            if line[4] in ['copy', 'overwrite', 'skipped']:
-                if line[1] not in results:
-                    results[line[1]] = []
-                result[line[1]].append(line)
-            elif line[4] in ['rejected', 'lost'] and line[1] not in failed_gateways[line[4]]:
-                failed_gateways[line[4]].append(line[1])
-        elif line[0] == 'STATS':
-            if line[1] in failed_gateways['conn_failed']:
-                pass
-            else:
-                stats_arr.append(line)
-        elif line[0] == 'HSTATS':
-            h_stats_arr.append(line)
-
-    return {
-        'CONNECT' : connect_arr,
-        'RESULT'  : results,
-        'STATUS'  : stats_arr,
-        'FAILED'  : failed_gateways,
-    }
 
 
 def uftp_server_runner(target_id, is_cluster=False, retries=2):
@@ -133,27 +81,33 @@ def uftp_server_runner(target_id, is_cluster=False, retries=2):
                 gateway_ids = []
                 target_dir = ''
 
+                # TODO: Fetch info from JSON file here
                 if is_cluster is True:
-                    # TODO: Fetch info from JSON file here
                     gateway_ids = ['0x12341234', '0xABCDABCD', '0x00998877']
                     target_dir = base_dir / 'cluster' / str(target_id)
                 elif is_cluster is False:
                     gateway_ids = [target_id]
-                    target_dir = base_dir / 'device' / str(target_id)
+                    target_dir = base_dir / 'devices' / str(target_id)
+
+                if target_dir.exists() is False:
+                    break
 
                 session_info['gateways_list'] = gateway_ids
                 session_info['target_dir'] = str(target_dir)
 
-                host_list = '"' + ','.join(gateway_id for gateway_id in gateway_ids) + '"'
+                host_list = ','.join(gateway_id for gateway_id in gateway_ids)
+                print(host_list)
+
+                if len(gateway_ids) > 1:
+                    host_list = '"' + host_list + '"'
 
                 with psutil.Popen(uftp_server_commands + [host_list, str(target_dir)]) as uftp_server:
+                    print(uftp_server.cmdline())
                     return_code = uftp_server.wait(timeout=process_timeout)
 
                 message = ''
 
-                if return_code is None:
-                    message = 'Something wrong occured!'
-                elif return_code in [2, 3, 4, 5, 6, 9]:
+                if return_code in [2, 3, 4, 5, 6, 9]:
                     message = 'An error occurred!'
                 elif return_code in [7, 8]:
                     message = 'No Clients responded!'
@@ -167,11 +121,8 @@ def uftp_server_runner(target_id, is_cluster=False, retries=2):
 
                     # Check for any failure in this session
                     all_good = len([val for val in status_data['FAILED'].values() if len(val) > 0]) == 0
-
-                    if all_good is True:
-                        break
-                    else:
-                        attempts += 1
+                else:
+                    message = 'Something wrong occured!'
 
 
                 print(message)
@@ -180,7 +131,17 @@ def uftp_server_runner(target_id, is_cluster=False, retries=2):
 
                 status_response['session_info'].append({**session_info, 'status_file' : status_data})
 
-            status_response['status'] = 'success' if all_good is True else 'failed'
+                if all_good is True:
+                    break
+                else:
+                    attempts += 1
+
+            if all_good is True:
+                status_response['status'] = 'success' 
+            elif all_good is False:
+                status_response['status'] = 'failed'
+            elif all_good is None:
+                status_response['status'] = 'target_dir_not_found'
 
     except TimeoutExpired:
         # If UFTP Server runs longer than the defined timeout value
@@ -188,8 +149,16 @@ def uftp_server_runner(target_id, is_cluster=False, retries=2):
         status_response['status'] = 'timeout'
     finally:
         # Deletes the status file so that the next session starts with a clean file
-        status_file.unlink(missing_ok=True)
-        return json.dumps(status_response)
+        if status_file.exists() is True:
+            status_file.unlink()
 
-# Play with the parameters here
-print(uftp_server_runner())
+        return status_response
+
+# Before running, the file(s) to be sent must be prepared in a directory with this structure:
+# (base_dir)/(device or cluster)/(device or cluster ID)
+
+# For example, with the default base_dir (./data/) and target cluster ID of "example_cluster":
+# ./data/cluster/example_cluster
+
+# The first parameter should be the device/cluster ID, but here it is directly the target gateway ID
+print(uftp_server_runner('0x12341234'))

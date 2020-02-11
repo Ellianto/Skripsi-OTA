@@ -33,16 +33,14 @@ def directory_check():
     dirs = [destination_dir, backup_dir]
 
     for dir in dirs:
-        try:
-            if dir.exists() is not True:
-                print('Directory {} not detected, creating directory...'.format(str(dir)))
-                dir.mkdir(parents=True)
-        except FileExistsError:
+        if dir.exists() is not True:
+            print('Directory {} not detected, creating directory...'.format(str(dir)))
+            dir.mkdir(parents=True)
+        else:
             print('Directory {} checked, exists'.format(str(dir)))
 
 
 try:
-    # TODO: Check for the existence of the directories first
     directory_check()
     proc_name = 'uftpd.exe'
     uftpd_process = next(p for p in psutil.process_iter() if p.name() == proc_name)
@@ -51,6 +49,7 @@ except StopIteration:
     # via psutil Module
     uftp_client = psutil.Popen(uftp_client_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
+    # is_running() will also return True if it is a zombie process
     if uftp_client.is_running() is True:        
         print('Started UFTP Client Daemon with PID : {}'.format(uftp_client.pid))
     else:
