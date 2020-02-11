@@ -14,6 +14,7 @@ from subprocess import PIPE
 # TODO: Handle delete event for gateway/controller side
 # TODO: Handle disconnect event, if possible
 # TODO: Create string constants for status_response objects
+# TODO: Single Responsibility Principle
 
 app = Flask(__name__)
 
@@ -271,11 +272,13 @@ def parse_lines(lines):
         'FAILED': failed_gateways,
     }
 
-# Before running, the file(s) to be sent must be prepared in a directory with this structure:
-# (base_dir)/(device or cluster)/(device or cluster ID)
+"""
+Before running, the file(s) to be sent must be prepared in a directory with this structure:
+(base_dir)/(device or cluster)/(device or cluster ID)
 
-# For example, with the default base_dir (./data/) and target cluster ID of "example_cluster":
-# ./data/cluster/example_cluster
+For example, with the default base_dir (./data/) and target cluster ID of "example_cluster":
+./data/cluster/example_cluster
+"""
 def run_uftp_server(target_id, is_cluster=False, retries=2):
     status_response = {}
     status_response['status'] = ''
@@ -752,6 +755,7 @@ def handle_message(client, userdata, message):
 
 # End of MQTT Functions
 
+# CLI Entry point
 if __name__ == '__main__':
     init_dirs()
     init_files()
