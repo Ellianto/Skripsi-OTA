@@ -21,11 +21,12 @@ prv_multicast_addr = '230.5.5.x'
 curr_dir = Path(__file__).parent.absolute()
 
 base_dir = curr_dir / 'data'
+uftp_dir = curr_dir / 'uftp'
 
-status_file = curr_dir / 'uftp' / 'status.txt'
-log_file = curr_dir / 'uftp' / 'uftp_server_logfile.txt'
+status_file = uftp_dir / 'status.txt'
+log_file = uftp_dir / 'uftp_server_logfile.txt'
 
-path_to_uftp_server_exe = curr_dir / 'uftp' / 'uftp.exe'
+path_to_uftp_server_exe = uftp_dir / 'uftp.exe'
 
 max_log_size = '2'  # in MB, specifies limit size before a log file is backed up
 max_log_count = '5'  # Default UFTP Value, keeps max 5 iterations of log backups
@@ -47,9 +48,6 @@ uftp_server_commands = [str(path_to_uftp_server_exe),
                         '-M', pub_multicast_addr,  # The Initial Public Multicast Address for the ANNOUNCE phase
                         '-P', prv_multicast_addr,  # The Private Multicast Address for FILE TRANSFER phase
                         '-H']  # List of comma separated target client IDs, enclosed in "" if more than one (0x prefix optional)
-
-
-
 
 def uftp_server_runner(target_id, is_cluster=False, retries=2):
     try:
@@ -154,11 +152,15 @@ def uftp_server_runner(target_id, is_cluster=False, retries=2):
 
         return status_response
 
-# Before running, the file(s) to be sent must be prepared in a directory with this structure:
-# (base_dir)/(device or cluster)/(device or cluster ID)
+"""
+Before running, the file(s) to be sent must be prepared in a directory with this structure:
+(base_dir)/(device or cluster)/(device or cluster ID)
 
-# For example, with the default base_dir (./data/) and target cluster ID of "example_cluster":
-# ./data/cluster/example_cluster
+For example, with the default base_dir (./data/) and target cluster ID of "example_cluster":
+./data/cluster/example_cluster
 
-# The first parameter should be the device/cluster ID, but here it is directly the target gateway ID
-print(uftp_server_runner('0x12341234'))
+The first parameter should be the device/cluster ID, but here it is directly the target gateway ID
+"""
+
+if __name__ == '__main__':
+    print(uftp_server_runner('0x12341234'))
