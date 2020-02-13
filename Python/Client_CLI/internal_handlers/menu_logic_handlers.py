@@ -119,7 +119,6 @@ def free_device_options_logic(free_devices):
 
 
 def choose_cluster_options_logic(clusters, free_device_choice):
-
     while True:
         try:
             cluster_choice = user_io_handlers.handle_cluster_options(clusters)

@@ -1,9 +1,9 @@
 {
     "data": [
         {
-            "cluster": null,
+            "cluster": "cluster_test_0x1",
             "gateway": null,
-            "id": "testing_device_id_01",
+            "id": "device_test_x01",
             "type": null
         }
     ]

@@ -66,6 +66,7 @@ def handle_options_list(items, title, exhausted):
     print(separator)
     print(title.center(36))
     print(separator)
+    print('0. Return')
     
     ctr = 1
 
@@ -84,18 +85,18 @@ def handle_update_options(items, keyword):
     title = 'Choose a {} to Update'.format(keyword)
     exhausted = 'No {} detected!'.format(keyword)
     user_choice = handle_options_list(items, title, exhausted)
-    return None if user_choice == 0 else items[user_choice - 1]
+    return None if user_choice is None else items[user_choice - 1]
 
 
 def handle_free_devices_options(free_devices):
     title = 'Choose Device to Add to Cluster'
     exhausted = 'No free devices detected!'
     user_choice = handle_options_list(free_devices, title, exhausted)
-    return None if user_choice == 0 else free_devices[user_choice - 1]
+    return None if user_choice is None else free_devices[user_choice - 1]
 
 
 def handle_cluster_options(clusters):
     title = 'Choose the cluster'
     exhausted = 'No clusters available!'
     user_choice = handle_options_list(clusters, title, exhausted)
-    return None if user_choice == 0 else clusters[user_choice - 1]
+    return None if user_choice is None else clusters[user_choice - 1]

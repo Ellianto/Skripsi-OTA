@@ -12,6 +12,7 @@ from voluptuous import (All, Any, Coerce, Length, Match, Maybe,
 
 # TODO: Handle delete event for gateway/controller side
 # TODO: Handle disconnect event, if possible
+# TODO: Refactor
 
 app = Flask(__name__)
 
@@ -142,16 +143,11 @@ def check_item_exists(item_id, item_type='device'):
 
 
 def check_device_membership(device_id):
-    try:
-        with path_to_devices_file.open() as devices_file:
-            devices = json.load(devices_file)['data']
-            device_membership = next(
-                device for device in devices if device['id'] == device_id)
-
-    except:
-        return None
-    else:
-        return device_membership['cluster']
+    with path_to_devices_file.open() as devices_file:
+        devices = json.load(devices_file)['data']
+        device_membership = next((device for device in devices if device['id'] == device_id), {'cluster':None})
+    
+    return device_membership['cluster']
 
 
 def init_files():
@@ -279,6 +275,7 @@ For example, with the default base_dir (./data/) and target cluster ID of "examp
 def run_uftp_server(target_id, is_cluster=False, retries=2):
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
     
     try:
         try:
@@ -291,6 +288,7 @@ def run_uftp_server(target_id, is_cluster=False, retries=2):
             print(uftp_server_check.as_dict())
 
             status_response['status'] = 'instance_running'
+            status_response['message'] = 'Currently, the system can only be used in single user mode'
             status_response['instance_info'] = uftp_server_check.as_dict()
 
         except StopIteration:
@@ -368,6 +366,7 @@ def run_uftp_server(target_id, is_cluster=False, retries=2):
 
             if all_good is True:
                 status_response['status'] = 'success'
+                status_response['message'] = 'Updates successfully sent to gateway!'
             elif all_good is False:
                 status_response['status'] = 'failed'
             elif all_good is None:
@@ -377,10 +376,15 @@ def run_uftp_server(target_id, is_cluster=False, retries=2):
         # If UFTP Server runs longer than the defined timeout value
         print('UFTP Server Timed Out! Re-tune the parameters or try again')
         status_response['status'] = 'timeout'
+        status_response['message'] = 'TimedOut when sending files to gateways'
+
     except StopIteration:
         keyword = 'cluster' if is_cluster is True else 'device'
-        print('No {} with that ID exists'.format(keyword))
+        msg = 'No {} with that ID exists'.format(keyword)
+        print(msg)
         status_response['status'] = 'missing_' + keyword
+        status_response['message'] = msg
+
     except:
         print('An error occurred!')
         raise
@@ -421,6 +425,7 @@ def get_free_devices():
 def start_update_device():
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     id_schema = Schema({Required('id'): id_validator})
 
@@ -445,6 +450,7 @@ def start_update_device():
 
     except StopIteration:
         status_response['status'] = 'missing_device'
+        status_response['message'] = 'No Device with that ID exists!'
     except MultipleInvalid:
         abort(400)
     finally:
@@ -455,6 +461,7 @@ def start_update_device():
 def start_update_cluster():
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     id_schema = Schema({Required('id'): id_validator})
 
@@ -472,6 +479,7 @@ def start_update_cluster():
 
     except StopIteration:
         status_response['status'] = 'missing_cluster'
+        status_response['message'] = 'No Cluster with that ID exists!'
     except MultipleInvalid:
         abort(400)
     finally:
@@ -482,6 +490,7 @@ def start_update_cluster():
 def add_new_device():
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     id_schema = Schema({Required('id'): id_validator})
 
@@ -490,6 +499,7 @@ def add_new_device():
 
         if check_item_exists(new_device_id):
             status_response['status'] = 'exists'
+            status_response['message'] = 'Device with that ID already exists!'
         else:
             with path_to_devices_file.open() as devices_file:
                 devices = json.load(devices_file)
@@ -506,6 +516,7 @@ def add_new_device():
                           skipkeys=True, sort_keys=True, ensure_ascii=True)
 
             status_response['status'] = 'success'
+            status_response['message'] = 'New device successfully created!'
 
     except OSError:
         status_response['status'] = 'error'
@@ -520,6 +531,7 @@ def add_new_device():
 def add_new_cluster():
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     id_schema = Schema({Required('id'): id_validator})
 
@@ -528,6 +540,7 @@ def add_new_cluster():
 
         if check_item_exists(new_cluster_id, item_type='cluster'):
             status_response['status'] = 'exists'
+            status_response['message'] = 'Cluster with that ID already exists!'
         else:
             with path_to_clusters_file.open() as clusters_file:
                 clusters = json.load(clusters_file)
@@ -545,6 +558,7 @@ def add_new_cluster():
                           skipkeys=True, sort_keys=True, ensure_ascii=True)
 
             status_response['status'] = 'success'
+            status_response['message'] = 'New cluster successfully created!'
 
     except OSError:
         status_response['status'] = 'error'
@@ -559,6 +573,7 @@ def add_new_cluster():
 def delete_device():
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     json_validator = Schema({Required('id'): id_validator})
 
@@ -567,7 +582,7 @@ def delete_device():
 
         if not check_item_exists(target_id):
             status_response['status'] = 'missing_device'
-            status_response['message'] = 'No device with that ID'
+            status_response['message'] = 'No device with that ID exists!'
         else:
             with path_to_devices_file.open() as devices_file:
                 devices = json.load(devices_file)
@@ -593,7 +608,7 @@ def delete_device():
                           skipkeys=True, sort_keys=True, ensure_ascii=True)
 
             status_response['status'] = 'success'
-            status_response['message'] = 'Successfully deleted device ' + target_device['id']
+            status_response['message'] = 'Device deleted successfully!'
     except OSError:
         status_response['status'] = 'error'
         status_response['message'] = 'Server Side Error Occurred!'
@@ -607,6 +622,7 @@ def delete_device():
 def delete_cluster():
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     json_validator = Schema({Required('id'): id_validator})
 
@@ -615,7 +631,7 @@ def delete_cluster():
 
         if not check_item_exists(target_id, item_type='cluster'):
             status_response['status'] = 'missing_cluster'
-            status_response['message'] = 'No cluster with that ID'
+            status_response['message'] = 'No cluster with that ID exists!'
         else:
             with path_to_clusters_file.open() as clusters_file:
                 clusters = json.load(clusters_file)
@@ -640,7 +656,7 @@ def delete_cluster():
                         skipkeys=True, sort_keys=True, ensure_ascii=True)
 
             status_response['status'] = 'success'
-            status_response['message'] = 'Successfully deleted cluster ' + target_cluster['id'] + ' and its ' + str(len(target_cluster['devices'])) + ' device(s)!'
+            status_response['message'] = 'Cluster deleted (recusively) successfully!'
 
     except OSError:
         status_response['status'] = 'error'
@@ -660,16 +676,20 @@ def register_device_to_cluster():
 
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     try:
         data = json_validator(request.json)
 
         if check_device_membership(data['device_id']) is not None:
             status_response['status'] = 'membership_exists'
-        elif not check_item_exists(data['device_id']):
+            status_response['message'] = 'Device already a member of a cluster!'
+        elif check_item_exists(data['device_id']) is not True:
             status_response['status'] = 'missing_device'
-        elif not check_item_exists(data['cluster_id'], item_type='cluster'):
+            status_response['message'] = 'No Device with that ID exists!'
+        elif check_item_exists(data['cluster_id'], item_type='cluster') is not True:
             status_response['status'] = 'missing_cluster'
+            status_response['message'] = 'No Cluster with that ID exists!'
         else:
             # Modify Cluster data
             with path_to_clusters_file.open() as clusters_file:
@@ -695,7 +715,7 @@ def register_device_to_cluster():
                           sort_keys=True, ensure_ascii=True)
 
             status_response['status'] = 'success'
-
+            status_response['message'] = 'Device registered to cluster successfully!'
     except MultipleInvalid:
         abort(400)
     finally:
@@ -716,20 +736,30 @@ def initialize_device():
 
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     try:
         device_data = strict_device_validator(request.json)
 
         if check_item_exists(device_data['id']) is not True:
-            status_response['status'] = 'unknown'
+            status_response['status'] = 'missing_device'
+            status_response['message'] = 'No Device with that ID exists!'
         elif check_item_exists(device_data['gateway'], item_type='gateway') is not True:
             status_response['status'] = 'missing_gateway'
+            status_response['message'] = 'No Gateway with that ID exists!'
         elif device_data['cluster'] is not None and check_item_exists(device_data['cluster'], item_type='cluster') is not True:
             status_response['status'] = 'missing_cluster'
-        elif check_device_membership(device_data['id']) == device_data['cluster']:
+            status_response['message'] = 'No Cluster with that ID exists!'
+        elif check_device_membership(device_data['id']) != device_data['cluster']:
             status_response['status'] = 'incorrect_cluster'
+            status_response['message'] = 'Incorrect cluster defined!'
         else:
-            status_response['status'] = 'success' if register_to_gateway(device_data) is True else 'error'
+            if register_to_gateway(device_data) is True:
+                status_response['status'] = 'success'
+                status_response['message'] = 'Device initialized successfully!'
+            else:
+                status_response['status'] = 'error'
+                status_response['message'] = 'Error while registering device to gateway!'
 
     except MultipleInvalid:
         abort(400)
@@ -741,9 +771,11 @@ def initialize_device():
 def initialize_gateway():
     status_response = {}
     status_response['status'] = ''
+    status_response['message'] = ''
 
     try:
         status_response['status'] = 'success'
+        status_response['message'] = 'Gateway initialized successfully!'
         status_response['gateway_uid'] = generate_gateway_uid()
         status_response['mqtt_topic'] = global_topic
         status_response['mqtt_broker'] = mqtt_broker
@@ -752,6 +784,7 @@ def initialize_gateway():
         status_response['max_log_count'] = max_log_count
     except:
         status_response['status'] = 'error'
+        status_response['message'] = 'Error while initializing gateway!'
     finally:
         return jsonify(status_response)
 
