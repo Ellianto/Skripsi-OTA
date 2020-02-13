@@ -1,24 +1,22 @@
-from flask import Flask, request, jsonify, abort
-from flask_mqtt import Mqtt
-
-from voluptuous import Schema, Required, All, Any, Length, Coerce, Maybe, Match, MultipleInvalid
-
 import json
 import random
-import psutil
-
 from pathlib import Path
 from subprocess import PIPE
 
-# TODO: Garbage collection both server side and gateway/controller side
+import psutil
+
+from flask import Flask, abort, jsonify, request
+from flask_mqtt import Mqtt
+from voluptuous import (All, Any, Coerce, Length, Match, Maybe,
+                        MultipleInvalid, Required, Schema)
+
 # TODO: Handle delete event for gateway/controller side
 # TODO: Handle disconnect event, if possible
-# TODO: Create string constants for status_response objects
-# TODO: Single Responsibility Principle
 
 app = Flask(__name__)
 
 global_topic = 'ota/control'
+cluster_topic = 'ota/cluster'
 
 curr_dir = Path(__file__).parent.absolute()
 
@@ -35,47 +33,46 @@ log_file = uftp_dir / 'uftp_server_logfile.txt'
 path_to_uftp_server_exe = uftp_dir / 'uftp.exe'
 
 # TODO: Might have to add randomizer to this (with a certain range) later
-# To enable multiple server process running at once
 port_number = '1044'  # Default from the UFTP manual
 pub_multicast_addr = '230.4.4.1'  # Default from the UFTP manual
 # Default from the UFTP manual, the 'x' will be randomized
 prv_multicast_addr = '230.5.5.x'
+end_device_multicast_addr = '230.6.6.1'
 
-# Can be arbritratily defined
-process_timeout = 30  # in seconds
+process_timeout = 30  # How long to wait (seconds) before declaring the UFTP Process to be timed out
 
 # UFTP Manual defaults to IPv4 address (converted to Hex) or last 4 bytes of IPv6 address
 server_uid = '0xABCDABCD'
-transfer_rate = '1024'  # UFTP Manual defaults to 1000, we try using 1024 Kbps
+transfer_rate = '1024'
 
-max_log_size = '2'  # in MB, specifies limit size before a log file is backed up
-max_log_count = '5'  # Default UFTP Value, keeps max 5 iterations of log backups
+robustness = '20' 
+max_log_size = '2'  
+max_log_count = '5'  
 
 # Still need to append client list and file list/target direactory
-uftp_server_commands = [str(path_to_uftp_server_exe),
-                        '-l',  # Unravel Symbolic Links
-                        '-z',  # Run the Server in Sync Mode, so clients will only receive new/updated files
-                        '-t', '3',  # TTL value for Multicast Packets, by default is 1 so we turn it up a little
-                        '-U', server_uid,  # Server UID for identification purposes. Clients can select which server to receive from based on Server's UID
-                        # Transfer rate in Kbps, if undefined will be set to 1000 by the UFTP Server. We set to 1024 Kbps = 128KB/s
-                        '-R', transfer_rate,
-                        # Base directory for the sent files, relevant only for subdirectory management in the client side
-                        '-E', str(base_dir),
-                        # Output for persable STATUS File, can be used to confirm the file transfer process' result. Only relevant in SYNC MODE
-                        '-S', str(status_file),
-                        # The log file output. If undefined, UFTP manual defaults to printing logs to stderr
-                        '-L', str(log_file),
-                        '-g', max_log_size,
-                        '-n', max_log_count,
-                        '-p', port_number,  # The port number the server will be listening from
-                        '-M', pub_multicast_addr,  # The Initial Public Multicast Address for the ANNOUNCE phase
-                        '-P', prv_multicast_addr,  # The Private Multicast Address for FILE TRANSFER phase
-                        '-H']  # List of comma separated target client IDs, enclosed in "" if more than one (0x prefix optional)
+uftp_server_cmd = [str(path_to_uftp_server_exe),
+                '-l',  # Unravel Symbolic Links
+                '-z',  # Run the Server in Sync Mode, so clients will only receive new/updated files
+                '-t', '3',  # TTL value for Multicast Packets, by default is 1 so we turn it up a little
+                '-U', server_uid,  # Server UID for identification purposes. 
+                '-R', transfer_rate, # Transfer rate (Kbps), defaults to 1000 Kbps. 1024 Kbps = 128KB/s
+                '-E', str(base_dir), # Base directory for the files, for client-side directory management
+                '-S', str(status_file), # Output for status file, to confirm the file transfer result. 
+                '-L', str(log_file), # The log file output. If undefined, defaults to printing logs to stderr
+                '-g', max_log_size,  # in MB, specifies limit size before a log file is backed up
+                '-n', max_log_count, # Default UFTP Value, keeps max 5 iterations of log backups
+                '-p', port_number,  # The port number the server will be listening from
+                '-M', pub_multicast_addr,  # The Initial Public Multicast Address for the ANNOUNCE phase
+                '-P', prv_multicast_addr,  # The Private Multicast Address for FILE TRANSFER phase
+                '-s', robustness, # The number of times a message will be repeated (10-50). defaults to 20
+                '-H']  # List of comma separated target client IDs, enclosed in "" if more than one
 
 
 # use the free broker from HIVEMQ
+mqtt_broker = 'broker.hivemq.com'
+
 app.config['MQTT_CLIENT_ID'] = 'main_server'
-app.config['MQTT_BROKER_URL'] = 'broker.hivemq.com'
+app.config['MQTT_BROKER_URL'] = mqtt_broker
 app.config['MQTT_BROKER_PORT'] = 1883
 app.config['MQTT_KEEPALIVE'] = 5
 app.config['MQTT_TLS_ENABLED'] = False
@@ -334,7 +331,7 @@ def run_uftp_server(target_id, is_cluster=False, retries=2):
                 if is_cluster is True:
                     host_list = '"' + host_list + '"'
 
-                with psutil.Popen(uftp_server_commands + [host_list, str(target_dir)]) as uftp_server:
+                with psutil.Popen(uftp_server_cmd + [host_list, str(target_dir)]) as uftp_server:
                     return_code = uftp_server.wait(timeout=process_timeout)
 
                 message = ''
@@ -417,7 +414,8 @@ def get_free_devices():
         devices = json.load(devices_file)
         free_devices = [device for device in devices['data']
                         if device['cluster'] is None]
-        return jsonify(free_devices)
+        return jsonify({'data': free_devices})
+
 
 @app.route('/update/device/', methods=['POST'])
 def start_update_device():
@@ -428,12 +426,25 @@ def start_update_device():
 
     try:
         target_id = id_schema(request.json)['id']
+
+        if check_item_exists(target_id) is not True:
+            raise StopIteration
+
         status_response = run_uftp_server(target_id)
 
         if status_response['status'] == 'success':
             # Publish "update" instruction via MQTT to instruct gateways to start update process
-            mqtt.publish(global_topic, 'update|device|' + target_id)
+            with path_to_devices_file.open() as devices_file:
+                devices = json.load(devices_file)
+                target_device = next(device for device in devices['data'] if device['id'] == target_id)
 
+            if target_device['cluster'] is None:
+                mqtt.publish(global_topic, 'update|device|' + target_id, qos=2)
+            else:
+                mqtt.publish(cluster_topic + '/' + target_device['cluster'], 'update|device|' + target_id, qos=2)
+
+    except StopIteration:
+        status_response['status'] = 'missing_device'
     except MultipleInvalid:
         abort(400)
     finally:
@@ -449,13 +460,18 @@ def start_update_cluster():
 
     try:
         target_id = id_schema(request.json)['id']
+
+        if check_item_exists(target_id, item_type='cluster') is not True:
+            raise StopIteration
+
         status_response = run_uftp_server(target_id, is_cluster=True)
 
         if status_response['status'] == 'success':
-            # TODO: Use specific topic ID with the gateway for cluster-based deployment for efficiency
             # Publish "update" instruction via MQTT to instruct gateways to start update process
-            mqtt.publish(global_topic, 'update|cluster|' + target_id)
+            mqtt.publish(cluster_topic + '/' + target_id, 'update|cluster|' + target_id, qos=2)
 
+    except StopIteration:
+        status_response['status'] = 'missing_cluster'
     except MultipleInvalid:
         abort(400)
     finally:
@@ -617,11 +633,11 @@ def delete_cluster():
 
                 with path_to_devices_file.open(mode='w') as devices_file:
                     json.dump(devices, devices_file, indent=4,
-                          skipkeys=True, sort_keys=True, ensure_ascii=True)
+                        skipkeys=True, sort_keys=True, ensure_ascii=True)
 
             with path_to_clusters_file.open() as clusters_file:
                 json.dump(devices, clusters_file, indent=4,
-                          skipkeys=True, sort_keys=True, ensure_ascii=True)
+                        skipkeys=True, sort_keys=True, ensure_ascii=True)
 
             status_response['status'] = 'success'
             status_response['message'] = 'Successfully deleted cluster ' + target_cluster['id'] + ' and its ' + str(len(target_cluster['devices'])) + ' device(s)!'
@@ -727,10 +743,13 @@ def initialize_gateway():
     status_response['status'] = ''
 
     try:
-        new_gateway_uid = generate_gateway_uid()
         status_response['status'] = 'success'
-        status_response['new_gateway_uid'] = new_gateway_uid
+        status_response['gateway_uid'] = generate_gateway_uid()
         status_response['mqtt_topic'] = global_topic
+        status_response['mqtt_broker'] = mqtt_broker
+        status_response['end_device_multicast_addr'] = end_device_multicast_addr
+        status_response['max_log_size'] = max_log_size
+        status_response['max_log_count'] = max_log_count
     except:
         status_response['status'] = 'error'
     finally:
@@ -742,16 +761,30 @@ def initialize_gateway():
 # MQTT Functions
 
 @mqtt.on_connect()
-def handle_connect(client, userdata, flags, rc):
-    print("Connected with return code {}".format(rc))
-    mqtt.subscribe(global_topic, qos=1)
+def handle_connect(client, userdata, flags, rc):    
+    if rc == 0:
+        print('Successfully connected to ' + mqtt_broker)
+        mqtt.subscribe(global_topic, qos=2)
+        mqtt.subscribe(cluster_topic, qos=2)
 
+    elif rc == 1:
+        print('Incorrect Protocol Version detected when connecting to ' + mqtt_broker)
+    elif rc == 2:
+        print('Invalid Client ID detected when connecting to ' + mqtt_broker)
+    elif rc == 3:
+        print('MQTT Server/Broker is unavailable when connecting to ' + mqtt_broker)
+    elif rc == 4:
+        print('Bad Username/Password detected when connecting to ' + mqtt_broker)
+    elif rc == 5:
+        print('Failed to Authorize when connecting to ' + mqtt_broker)
+    else:
+        print('Invalid Return Code (' + str(rc) + ') when connecting to ' + mqtt_broker)
 
 @mqtt.on_message()
-def handle_message(client, userdata, message):
-    # TODO: Differentiate logic here based on the messages
-    print("Message Received from topic {} : {}".format(
-        message.topic, message.payload.decode()))
+def handle_message(client, userdata, msg):
+    print("Message Received from topic " + str(
+        msg.topic) + ' : ' + str(msg.payload.decode()))
+
 
 # End of MQTT Functions
 

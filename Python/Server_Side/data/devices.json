@@ -1,3 +1,10 @@
 {
-    "data": []
+    "data": [
+        {
+            "cluster": null,
+            "gateway": null,
+            "id": "testing_device_id_01",
+            "type": null
+        }
+    ]
 }
