@@ -1,10 +1,12 @@
 import constants
-
-from internal_handlers.error_handlers import handle_misinput
-from internal_handlers.menu_logic_handlers import update_menu_logic, register_menu_logic, delete_menu_logic
 from internal_handlers import user_io_handlers
+from internal_handlers.error_handlers import handle_misinput
+from internal_handlers.menu_logic_handlers import (delete_menu_logic,
+                                                   register_menu_logic,
+                                                   update_menu_logic)
 
-def app():
+
+def run():
     while True:
         try:
             main_input = user_io_handlers.handle_main_menu()
@@ -26,4 +28,4 @@ def app():
 
 # CLI Entry point
 if __name__ == '__main__':
-    app()
+    run()
