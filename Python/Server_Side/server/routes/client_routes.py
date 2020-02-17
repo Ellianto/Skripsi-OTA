@@ -229,8 +229,8 @@ def delete_cluster():
 
                 file_io.write_devices(devices)
 
-        status_response['status'] = constants.strings.STATUS_CODE_SUCCESS
-        status_response['message'] = 'Cluster deleted (recusively) successfully!'
+            status_response['status'] = constants.strings.STATUS_CODE_SUCCESS
+            status_response['message'] = 'Cluster deleted (recusively) successfully!'
     except OSError:
         status_response['status'] = constants.strings.STATUS_CODE_ERROR
         status_response['message'] = 'Server Side Error Occurred!'
@@ -259,7 +259,7 @@ def register_device_to_cluster():
 
         device_exists = device is not None
         cluster_exists = cluster is not None
-        is_free_device = device['cluster'] is None
+        is_free_device = False if device_exists is not True else device['cluster'] is None
 
         if device_exists is not True:
             status_response['status'] = constants.strings.STATUS_CODE_MISSING_DEVICE

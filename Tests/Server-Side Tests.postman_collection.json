@@ -1,0 +1,963 @@
+{
+	"info": {
+		"_postman_id": "3768ac25-ce0a-494b-bd43-bb348fb5fca3",
+		"name": "Server-Side Tests",
+		"description": "Contains requests used to test the Server-side API.\n\nConsists of positive and negative cases",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Positive ",
+			"item": [
+				{
+					"name": "Mutation",
+					"item": [
+						{
+							"name": "Add Device",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"id": "917b0644-ba80-4aa9-8c4c-c2b7f87d86cd",
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"id\" : \"{{target_device_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/new/device/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"new",
+										"device",
+										""
+									]
+								},
+								"description": "Adds new device with a valid ID"
+							},
+							"response": []
+						},
+						{
+							"name": "Add Cluster",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"id": "917b0644-ba80-4aa9-8c4c-c2b7f87d86cd",
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"type": "text",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"id\" : \"{{target_cluster_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/new/cluster/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"new",
+										"cluster",
+										""
+									]
+								},
+								"description": "Adds new device with a valid ID"
+							},
+							"response": []
+						},
+						{
+							"name": "Register Device",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"id": "917b0644-ba80-4aa9-8c4c-c2b7f87d86cd",
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"type": "text",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"device_id\" : \"{{target_device_id}}\",\n\t\"cluster_id\" : \"{{target_cluster_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/register/device/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"register",
+										"device",
+										""
+									]
+								},
+								"description": "Adds new device with a valid ID"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Cluster",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"{{target_cluster_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/delete/cluster/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"delete",
+										"cluster",
+										""
+									]
+								},
+								"description": "Delete the cluster after registering. Expected to recursively delete device."
+							},
+							"response": []
+						}
+					],
+					"description": "Contains requests that modifies the data at the Server",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "3b4b3405-3bae-4e24-8c01-514357a1f78f",
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"id": "921c5ac9-1ba0-4f1d-82a1-336bc9bca303",
+								"type": "text/javascript",
+								"exec": [
+									"// Tests",
+									"const expected_status_response_code = \"success\";",
+									"",
+									"const expected_status_response_codes = JSON.parse(pm.collectionVariables.get(\"expected_status_response_codes\"))",
+									"",
+									"const status_response_schema = JSON.parse(pm.collectionVariables.get(\"status_response_schema\"))",
+									"",
+									"pm.test(\"Valid Status Response Schema\", () => {",
+									"    pm.response.to.have.jsonSchema(status_response_schema)",
+									"})",
+									"",
+									"pm.test(\"Valid Status Response Code\", () => {",
+									"    status_response = pm.response.json()",
+									"    pm.expect(expected_status_response_codes).to.be.an(\"array\").that.includes(status_response.status)",
+									"})",
+									"",
+									"pm.test(\"Valid Status Response Expectation\", () => {",
+									"    status_response = pm.response.json()",
+									"    pm.expect(status_response.status).to.eql(expected_status_response_code)",
+									"    console.log(status_response.message)",
+									"})",
+									"",
+									"// Cleanup",
+									"",
+									"// Cleanup"
+								]
+							}
+						}
+					],
+					"protocolProfileBehavior": {},
+					"_postman_isSubFolder": true
+				},
+				{
+					"name": "Query",
+					"item": [
+						{
+							"name": "List Devices",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{server_url}}/list/devices/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"list",
+										"devices",
+										""
+									]
+								},
+								"description": "List all Devices"
+							},
+							"response": []
+						},
+						{
+							"name": "List Clusters",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{server_url}}/list/clusters/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"list",
+										"clusters",
+										""
+									]
+								},
+								"description": "List all Devices"
+							},
+							"response": []
+						},
+						{
+							"name": "List Free Devices",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{server_url}}/list/free_devices/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"list",
+										"free_devices",
+										""
+									]
+								},
+								"description": "List all Devices"
+							},
+							"response": []
+						}
+					],
+					"description": "Contains Query Requests that doesn't change any data in the Server",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "fc147d85-d194-4b40-9b97-8e378300944b",
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"id": "0145ec8e-03b7-425b-8b97-634e97370ad4",
+								"type": "text/javascript",
+								"exec": [
+									"const data_response_schema = JSON.parse(pm.collectionVariables.get(\"data_response_schema\"))",
+									"",
+									"pm.test(\"Valid Status Response Schema\", () => {",
+									"    pm.response.to.have.jsonSchema(data_response_schema)",
+									"})",
+									""
+								]
+							}
+						}
+					],
+					"protocolProfileBehavior": {},
+					"_postman_isSubFolder": true
+				}
+			],
+			"description": "Positive Test Cases for the Server-Side API",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"id": "671f611f-a7e0-4c52-bbeb-1d082a9a64db",
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"id": "74192630-e5a6-477e-ab7d-b94ad1f69445",
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Request not Error\", () => {",
+							"    pm.response.to.not.be.error;",
+							"})"
+						]
+					}
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "Negative",
+			"item": [
+				{
+					"name": "Register Device",
+					"item": [
+						{
+							"name": "Missing Device",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"id": "48a653fd-628a-43ba-bf39-638fffe36cd6",
+										"exec": [
+											"// Tests",
+											"const expected_status_response_code = \"missing_device\";",
+											"",
+											"pm.test(\"Valid Status Response Expectation\", () => {",
+											"    status_response = pm.response.json()",
+											"    pm.expect(status_response.status).to.eql(expected_status_response_code)",
+											"    console.log(status_response.message)",
+											"})",
+											"",
+											"// Cleanup"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"device_id\" : \"{{non_existing_device_id}}\",\n\t\"cluster_id\": \"{{target_cluster_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/register/device/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"register",
+										"device",
+										""
+									]
+								},
+								"description": "Sends a non-existent device ID"
+							},
+							"response": []
+						},
+						{
+							"name": "Missing Cluster",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"id": "48a653fd-628a-43ba-bf39-638fffe36cd6",
+										"exec": [
+											"// Tests",
+											"const expected_status_response_code = \"missing_cluster\";",
+											"",
+											"pm.test(\"Valid Status Response Expectation\", () => {",
+											"    status_response = pm.response.json()",
+											"    pm.expect(status_response.status).to.eql(expected_status_response_code)",
+											"    console.log(status_response.message)",
+											"})",
+											"",
+											"// Cleanup"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"type": "text",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"device_id\" : \"{{target_device_id}}\",\n\t\"cluster_id\": \"{{non_existing_cluster_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/register/device/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"register",
+										"device",
+										""
+									]
+								},
+								"description": "Sends a non-existent device ID"
+							},
+							"response": []
+						}
+					],
+					"description": "Contains requests that are negative cases for the /register/device/ endpoint",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "f1f93f18-0f30-4ca3-b0e3-7bd1d3656762",
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"id": "722ec661-945d-4afb-87b4-4f3892853270",
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						}
+					],
+					"protocolProfileBehavior": {},
+					"_postman_isSubFolder": true
+				},
+				{
+					"name": "Delete",
+					"item": [
+						{
+							"name": "Delete Device",
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"id": "1e0850d6-03ea-40f8-b745-2288e97e2fdb",
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"id": "5733f034-ea78-4c61-b42a-9acb586f69c6",
+										"exec": [
+											"// Tests",
+											"const expected_status_response_code = \"missing_device\";",
+											"",
+											"pm.test(\"Valid Status Response Expectation\", () => {",
+											"    status_response = pm.response.json()",
+											"    pm.expect(status_response.status).to.eql(expected_status_response_code)",
+											"    console.log(status_response.message)",
+											"})",
+											"",
+											"// Cleanup"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"{{non_existing_device_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/delete/device/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"delete",
+										"device",
+										""
+									]
+								},
+								"description": "Delete non-existing device"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Cluster",
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"id": "1e0850d6-03ea-40f8-b745-2288e97e2fdb",
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"id": "5733f034-ea78-4c61-b42a-9acb586f69c6",
+										"exec": [
+											"// Tests",
+											"const expected_status_response_code = \"missing_cluster\";",
+											"",
+											"pm.test(\"Valid Status Response Expectation\", () => {",
+											"    status_response = pm.response.json()",
+											"    pm.expect(status_response.status).to.eql(expected_status_response_code)",
+											"    console.log(status_response.message)",
+											"})",
+											"",
+											"// Cleanup"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"type": "text",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"{{non_existing_cluster_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/delete/cluster/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"delete",
+										"cluster",
+										""
+									]
+								},
+								"description": "Delete non-existing device"
+							},
+							"response": []
+						}
+					],
+					"protocolProfileBehavior": {},
+					"_postman_isSubFolder": true
+				},
+				{
+					"name": "Update",
+					"item": [
+						{
+							"name": "Update Device",
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"id": "1e0850d6-03ea-40f8-b745-2288e97e2fdb",
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"id": "5733f034-ea78-4c61-b42a-9acb586f69c6",
+										"exec": [
+											"// Tests",
+											"const expected_status_response_code = \"missing_device\";",
+											"",
+											"pm.test(\"Valid Status Response Expectation\", () => {",
+											"    status_response = pm.response.json()",
+											"    pm.expect(status_response.status).to.eql(expected_status_response_code)",
+											"    console.log(status_response.message)",
+											"})",
+											"",
+											"// Cleanup"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"type": "text",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"{{non_existing_device_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/update/device/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"update",
+										"device",
+										""
+									]
+								},
+								"description": "Delete non-existing device"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Cluster",
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"id": "1e0850d6-03ea-40f8-b745-2288e97e2fdb",
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"id": "5733f034-ea78-4c61-b42a-9acb586f69c6",
+										"exec": [
+											"// Tests",
+											"const expected_status_response_code = \"missing_cluster\";",
+											"",
+											"pm.test(\"Valid Status Response Expectation\", () => {",
+											"    status_response = pm.response.json()",
+											"    pm.expect(status_response.status).to.eql(expected_status_response_code)",
+											"    console.log(status_response.message)",
+											"})",
+											"",
+											"// Cleanup"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"type": "text",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"{{non_existing_cluster_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server_url}}/update/cluster/",
+									"host": [
+										"{{server_url}}"
+									],
+									"path": [
+										"update",
+										"cluster",
+										""
+									]
+								},
+								"description": "Delete non-existing device"
+							},
+							"response": []
+						}
+					],
+					"protocolProfileBehavior": {},
+					"_postman_isSubFolder": true
+				}
+			],
+			"description": "Negative Cases (but not error) for the Server-side API",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"id": "549d857d-68d2-4dac-b972-cc1b98d8a4d7",
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"id": "dddf2b71-7826-47c8-a8ea-32596796f50b",
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Request not Error\", () => {",
+							"    pm.response.to.not.be.error;",
+							"})",
+							"",
+							"const status_response_schema = JSON.parse(pm.collectionVariables.get(\"status_response_schema\"))",
+							"",
+							"pm.test(\"Valid Status Response Schema\", () => {",
+							"    pm.response.to.have.jsonSchema(status_response_schema)",
+							"})",
+							"",
+							"const expected_status_response_codes = JSON.parse(pm.collectionVariables.get(\"expected_status_response_codes\"))",
+							"",
+							"pm.test(\"Valid Status Response Code\", () => {",
+							"    status_response = pm.response.json()",
+							"    pm.expect(expected_status_response_codes).to.be.an(\"array\").that.includes(status_response.status)",
+							"})",
+							"",
+							"// Cleanup"
+						]
+					}
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "Flow Test",
+			"item": [],
+			"description": "Contains sequence of requests that test positive use case for the server",
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "Error",
+			"item": [],
+			"description": "Contains request to test the JSON Validation in the server side",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"id": "ff345e5d-87f5-44f3-8e9c-6a88e52ae6df",
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Request not Error\", () => {",
+							"    pm.response.to.be.badRequest;",
+							"})"
+						]
+					}
+				}
+			],
+			"protocolProfileBehavior": {}
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "d948946b-ae56-4cb8-9cfd-ea6ba59c2235",
+				"type": "text/javascript",
+				"exec": [
+					"const status_response_schema = {",
+					"    \"message\" : {\"type\" : \"string\"},",
+					"    \"status\"  : {\"type\" : \"string\"},",
+					"};",
+					"",
+					"pm.collectionVariables.set(\"status_response_schema\", JSON.stringify(status_response_schema));",
+					"",
+					"const expected_status_response_codes = [",
+					"    'success', 'error', 'failed', 'partial_failure', '',",
+					"    'device_exists', 'cluster_exists', 'membership_exists', ",
+					"    'missing_device', 'missing_cluster', 'missing_gateway', 'missing_data',",
+					"    'uninitialized', 'cluster_mismatch', 'instance_running',",
+					"]",
+					"",
+					"pm.collectionVariables.set('expected_status_response_codes', JSON.stringify(expected_status_response_codes))",
+					"",
+					"const data_response_schema = {",
+					"    \"data\" : {\"type\" : \"array\"},",
+					"}",
+					"",
+					"pm.collectionVariables.set(\"data_response_schema\", JSON.stringify(data_response_schema));"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "1ec19432-a28d-4cb7-8eb3-dddb7817276c",
+				"type": "text/javascript",
+				"exec": [
+					"pm.test(\"Request have JSON body\", () => {",
+					"    pm.response.to.have.jsonBody();",
+					"})"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"id": "fae1a45f-cf13-4761-8f24-14eb1fb362eb",
+			"key": "server_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"id": "8e1c2c75-81aa-43ac-8355-f7dff01353c7",
+			"key": "non_existing_device_id",
+			"value": "n0n_3x15ting_device",
+			"type": "string"
+		},
+		{
+			"id": "46746c02-f65d-4fb1-95e7-bccee91a6576",
+			"key": "non_existing_cluster_id",
+			"value": "n0n_3x15ting_cluster",
+			"type": "string"
+		},
+		{
+			"id": "2dcf0e3e-b37f-4207-b09c-a956e91c077a",
+			"key": "target_device_id",
+			"value": "target_device_001",
+			"type": "string"
+		},
+		{
+			"id": "552ada23-0ab2-405d-83da-30a40750e573",
+			"key": "target_cluster_id",
+			"value": "target_cluster_001",
+			"type": "string"
+		},
+		{
+			"id": "0d82d451-04bf-4a45-bf30-c8be64a90d32",
+			"key": "data_response_schema",
+			"value": "{\"data\":{\"type\":\"array\"}}",
+			"type": "string"
+		},
+		{
+			"id": "0acaf11e-7391-4dd3-b266-4f228a84fd62",
+			"key": "expected_status_response_codes",
+			"value": "[\"success\",\"error\",\"failed\",\"partial_failure\",\"\",\"device_exists\",\"cluster_exists\",\"membership_exists\",\"missing_device\",\"missing_cluster\",\"missing_gateway\",\"missing_data\",\"uninitialized\",\"cluster_mismatch\",\"instance_running\"]",
+			"type": "string"
+		},
+		{
+			"id": "12df828f-7b62-40cd-b08e-caec7c85447d",
+			"key": "status_response_schema",
+			"value": "{\"message\":{\"type\":\"string\"},\"status\":{\"type\":\"string\"}}",
+			"type": "string"
+		}
+	],
+	"protocolProfileBehavior": {}
+}
