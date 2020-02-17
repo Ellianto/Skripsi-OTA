@@ -75,16 +75,22 @@ def new_item_options_logic(menu_input):
     valid_input = False
 
     while valid_input is False:
-        new_item_id = input(prompts.INPUT_ID_PROMPT)
+        try:
+            new_item_id = input(prompts.INPUT_ID_PROMPT)
 
-        if new_item_id == '0':
+            if new_item_id == '0':
+                break
+            elif new_item_id.isidentifier() is False or keyword.iskeyword(new_item_id) is True:
+                print(messages.INVALID_IDENTIFIER_MESSAGE)
+            elif len(new_item_id) not in range(8, 31):
+                print(messages.INCORRECT_LENGTH_MESSAGE)
+            else:
+                valid_input = True
+
+        except Exception as err:
+            handle_misinput(err)
+            valid_input = False
             break
-        elif new_item_id.isidentifier() is False or keyword.iskeyword(new_item_id) is True:
-            print(messages.INVALID_IDENTIFIER_MESSAGE)
-        elif len(new_item_id) not in range(8, 31):
-            print(messages.INCORRECT_LENGTH_MESSAGE)
-        else:
-            valid_input = True
 
     if valid_input is True:
         item_name = 'Device' if menu_input == 1 else 'Cluster'

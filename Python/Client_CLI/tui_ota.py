@@ -1,27 +1,21 @@
-import constants
-from internal_handlers import user_io_handlers
-from internal_handlers.error_handlers import handle_misinput
-from internal_handlers.menu_logic_handlers import (delete_menu_logic,
-                                                   register_menu_logic,
-                                                   update_menu_logic)
-
+import internal_handlers
 
 def run():
     while True:
         try:
-            main_input = user_io_handlers.handle_main_menu()
+            main_input = internal_handlers.user_io_handlers.handle_main_menu()
 
             if main_input is None:  # Quit Option
                 break
             elif main_input == 1:  # Firmware Update Option
-                update_menu_logic()
+                internal_handlers.menu_logic_handlers.update_menu_logic()
             elif main_input == 2:  # Register Device Option
-                register_menu_logic()
+                internal_handlers.menu_logic_handlers.register_menu_logic()
             elif main_input == 3:  # Delete option
-                delete_menu_logic()
+                internal_handlers.menu_logic_handlers.delete_menu_logic()
 
-        except (ValueError, IndexError) as err:
-            handle_misinput(err)
+        except Exception as err:
+            internal_handlers.error_handlers.handle_misinput(err)
 
     print('Thank you!')
 

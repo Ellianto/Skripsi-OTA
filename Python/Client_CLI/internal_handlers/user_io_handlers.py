@@ -17,66 +17,62 @@ def menu_input_validation(options_limit):
 
     if user_input not in range(options_limit):
         raise IndexError
-    elif user_input == 0:
-        return None
-    else:
-        return user_input
+
+    return None if user_input == 0 else user_input
+
+def menu_printer(title, choices):
+    clear_screen()
+    print(separator)
+    print(title.center(width))
+    print(separator)
+
+    for choice in choices:
+        print(choice)
+
+    print(separator)
+    return menu_input_validation(len(choices))
 
 
 def handle_main_menu():
-    clear_screen()
-    print(separator)
-    print('OTA Firmware Update'.center(36))
-    print(separator)
-    print('0. Quit')
-    print('1. Update Firmware')
-    print('2. Register Device/Cluster')
-    print('3. Delete Device/Cluster')
-    print(separator)
-    return menu_input_validation(4)
+    title = 'OTA Firmware Update'
+    choices = [ '0. Quit',
+                '1. Update Firmware',
+                '2. Register Device/Cluster',
+                '3. Delete Device/Cluster']
+    return menu_printer(title, choices)
 
 
 def handle_update_menu():
-    clear_screen()
-    print(separator)
-    print('Choose Update Mode'.center(36))
-    print(separator)
-    print('0. Return')
-    print('1. Update Individual Device')
-    print('2. Update Cluster of Device')
-    print(separator)
-    return menu_input_validation(3)
+    title = 'Choose Update Mode'
+    choices = [ '0. Return',
+                '1. Update Individual Device',
+                '2. Update Cluster of Device']
+    return menu_printer(title, choices)
 
 
 def handle_register_menu():
-    clear_screen()
-    print(separator)
-    print('Choose Register Mode'.center(36))
-    print(separator)
-    print('0. Return')
-    print('1. Add New Individual Device')
-    print('2. Add New Cluster ')
-    print('3. Register Device to Cluster')
-    print(separator)
-    return menu_input_validation(4)
+    title = 'Choose Register Mode'
+    choices = [ '0. Return',
+                '1. Create New Device ID',
+                '2. Create New Cluster ID',
+                '3. Register Device ID to Cluster ID']
+    return menu_printer(title, choices)
 
 # TODO: Add pagination later
 def handle_options_list(items, title, exhausted):
     clear_screen()
     print(separator)
-    print(title.center(36))
+    print(title.center(width))
     print(separator)
     print('0. Return')
     
     ctr = 1
-
-    if len(items) > 0:
-        for item in items:
-            print('{}. {}'.format(ctr, item['id']))
-            ctr += 1
-    else:
+    for item in items:
+        print('{}. {}'.format(ctr, item['id']))
+        ctr += 1
+    
+    if len(items) == 0:
         print(exhausted)
-
     print(separator)
     return menu_input_validation(ctr)
 

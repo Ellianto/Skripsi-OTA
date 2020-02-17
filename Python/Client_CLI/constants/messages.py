@@ -1,6 +1,7 @@
 # Validation Error Messages
 CHOICE_TYPE_ERROR_MESSAGE = 'Please input a proper choice! (Integer)'
 CHOICE_OUT_OF_RANGE_MESSAGE = 'Please input a number specified in the options!'
+USER_BREAK_MESSAGE = 'User pressed BREAK!'
 INCORRECT_LENGTH_MESSAGE = 'Inappropriate Length! Input 8-30 characters!'
 INVALID_IDENTIFIER_MESSAGE = """Invalid Python Identifier! Valid Python Identifiers fulfill these requirements : 
 -> Alphanumeric ('_' allowed)

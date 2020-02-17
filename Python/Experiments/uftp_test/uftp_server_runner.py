@@ -23,7 +23,7 @@ curr_dir = Path(__file__).parent.absolute()
 base_dir = curr_dir / 'data'
 uftp_dir = curr_dir / 'uftp'
 
-status_file = uftp_dir / 'status.txt'
+status_file = curr_dir / 'status.txt'
 log_file = uftp_dir / 'uftp_server_logfile.txt'
 
 path_to_uftp_server_exe = uftp_dir / 'uftp.exe'
@@ -105,11 +105,11 @@ def uftp_server_runner(target_id, is_cluster=False, retries=2):
 
                 message = ''
 
-                if return_code in [2, 3, 4, 5, 6, 9]:
+                if return_code in [1, 2, 3, 4, 5, 6, 9]:
                     message = 'An error occurred!'
                 elif return_code in [7, 8]:
                     message = 'No Clients responded!'
-                elif return_code in [1, 10]:
+                elif return_code in [0, 10]:
                     message = 'Session Complete!'
 
                     with status_file.open() as f:

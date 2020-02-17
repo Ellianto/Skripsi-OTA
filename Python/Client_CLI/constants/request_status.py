@@ -1,6 +1,18 @@
 # Status Codes (string)
-ERROR = 'error'
 SUCCESS = 'success'
-DEVICE_NOT_FOUND = 'missing_device'
-CLUSTER_NOT_FOUND = 'missing_cluster'
-ITEM_ALREADY_EXISTS = 'exists'
+FAILED = 'failed'
+ERROR = 'error'
+PARTIAL_FAILURE = 'partial_failure'
+
+DEVICE_EXISTS = 'device_exists'
+CLUSTER_EXISTS = 'cluster_exists'
+MEMBERSHIP_EXISTS = 'membership_exists'
+
+MISSING_DATA = 'missing_data'
+MISSING_DEVICE = 'missing_device'
+MISSING_CLUSTER = 'missing_cluster'
+MISSING_GATEWAY = 'missing_gateway'
+
+UNINITIALIZED = 'uninitialized'
+CLUSTER_MISMATCH = 'cluster_mismatch'
+UFTP_INSTANCE_RUNNING = 'instance_running'

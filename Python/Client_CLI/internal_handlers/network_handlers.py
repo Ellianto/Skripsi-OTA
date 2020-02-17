@@ -17,8 +17,7 @@ def fetch_from_server(target_endpoint):
         if response.raise_for_status() is not None:
             raise requests.exceptions.HTTPError
 
-        request_data = response.json()
-
+        request_data = fetch_validator(response.json())
     except Exception as err:
         handle_request_exceptions(err)
 
@@ -30,7 +29,7 @@ def send_to_server(target_endpoint, data, method='POST'):
     status_validator = Schema({
         Required('status') : Coerce(str),
         Required('message') : Coerce(str),
-    })
+    }, extra=voluptuous.ALLOW_EXTRA)
 
     try:
         if method == 'POST':
@@ -43,9 +42,7 @@ def send_to_server(target_endpoint, data, method='POST'):
         if response.raise_for_status() is not None:
             raise requests.exceptions.HTTPError
 
-        # TODO: Validate JSON Response
         status_response = status_validator(response.json())
-        # TODO: Adjust server-side logic to always return message
         print(status_response['message'])
         getch()
 
