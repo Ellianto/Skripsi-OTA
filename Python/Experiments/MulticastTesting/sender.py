@@ -13,7 +13,8 @@ import sys
 import time
 
 # Address and port have to match receiver side
-multicast_group = ('224.100.100.100', 10000)
+# multicast_group = ('224.100.100.100', 10000)
+multicast_group = ('224.255.255.255', 5432)
 
 # Create the Datagram socket by specifying SOCK_DGRAM
 udp_sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -41,7 +42,7 @@ try:
             start = time.time()
             # If timedout while waiting to receive, will raise socket.timeout Exception
             # BUFFER SIZES MATTERS, if data_send > buffer_size will raise OSError
-            data, server = udp_sender.recvfrom(default_buffer_size)
+            data, addr = udp_sender.recvfrom(default_buffer_size)
         except socket.timeout:
             # Timeout value is based on the value passed to socket.settimeout(timeout_value)
             print('Timed out! No more response received')
@@ -49,7 +50,7 @@ try:
         except OSError:
             default_buffer_size *= 2
         else:
-            print('Received {} from {}'.format(data, server))
+            print('Received {} from {}'.format(data, addr))
         finally:
             # For time measurements, try to match with the timeout set in settimeout
             print(str(time.time() - start) + ' s elapsed!')

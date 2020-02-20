@@ -11,8 +11,8 @@ import socket
 import struct
 import sys
 
-multicast_addr = '224.100.100.100' # Address and port have to match sender side
-server_address = ('', 10000) # empty string = bind to all interface
+multicast_addr = '224.255.255.255' # Address and port have to match sender side
+server_address = ('', 5432) # empty string = bind to all interface
 
 # Creates the socket
 udp_receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
