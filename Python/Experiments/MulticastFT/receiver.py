@@ -19,10 +19,24 @@ curr_dir = Path(__file__).parent.absolute()
 data_dir = curr_dir / 'data'
 target_file = data_dir / 'target.zip'
 
+
+"""
+    Reply Codes to send:
+    -> Main Phase:
+        OK : Ready for file transfer (sufficient free space)
+        FA : Failed somehow (find use for this)
+        NO : Not enough disk space
+
+    -> End Phase:
+        ACK : Files received successfully (hashsum matches)
+        NEQ : Files hashsum doesn't match
+"""
+
+# ! Buffer size in client side must be larger than packet sent gateway-side
 command_multicast_addr = socket.inet_aton('224.255.255.255')
 global_multicast_group = ('', 5432)
 data_multicast_group = None
-buffer_size = 1024  # TODO: Try to use a sensible number
+buffer_size = 1024  # TODO: Try to use a more fitting number
 
 device_id = 'target_device_001'
 cluster_id = 'target_cluster_x01'
@@ -54,9 +68,9 @@ except socket.error:
 while True:
     try:
         print('Waiting for server...')
+        global_multicast_socket.settimeout(None)
         msg, addr = global_multicast_socket.recvfrom(buffer_size)
         messages = [val.decode() for val in msg.split(b'|')]
-        print(messages)
 
         if messages[0] in ['c', 'd']:
             should_listen = (device_id if messages[0] == 'd' else cluster_id) == messages[1]
@@ -89,35 +103,71 @@ while True:
                     print('Failed to join to Data Multicast Group!')
                     sys.exit()
 
-                with target_file.open(mode='wb') as file:
-                    total = 0
-                    start = time.time()
-                    while total < file_size:
-                        file_data, incoming_addr = data_multicast_socket.recvfrom(buffer_size)
-                        file.write(file_data)
-                        total += len(file_data)
-                        print('Current Size Received : ' + str(total))
-                        print('Progress : {}%'.format(str((total/file_size) * 100)))
+                transfer_cmd, addr = global_multicast_socket.recvfrom(buffer_size)
+                transfer_msg = [val.decode() for val in transfer_cmd.split(b'|')]
 
-                    print('File received completely! Closing data socket...')
-                    print('Time Elapsed : ' + str(time.time() - start))
-                    data_multicast_socket.close()
+                if transfer_msg[0] == 't':
+                    with target_file.open(mode='wb') as file:
+                        total = 0
+                        start = time.time()
+                        while total < file_size:
+                            file_data, incoming_addr = data_multicast_socket.recvfrom(
+                                buffer_size)
+                            file.write(file_data)
+                            total += len(file_data)
+                            print('Current Size Received : ' + str(total))
+                            print('Progress : {}%'.format(
+                                str((total/file_size) * 100)))
 
-                hashsum = md5CheckSum(target_file)
-                print('Received File\'s Checksum : ' + str(hashsum))
+                        print('File received completely! Closing data socket...')
+                        print('Time Elapsed : ' + str(time.time() - start))
+                        data_multicast_socket.close()
 
-                # File Checking (can use hashsum too)
-                try:
-                    if zipfile.is_zipfile(str(target_file)) is True:
-                        with zipfile.ZipFile(str(target_file)) as new_zip:
-                            new_zip.extractall(path=data_dir)
+                    server_checksum = None
+                    try:
+                        global_multicast_socket.settimeout(3.0)
+                        ack_cmd, addr = global_multicast_socket.recvfrom(
+                            buffer_size)
+                        ack_msg = [val.decode() for val in ack_cmd.split(b'|')]
+                        server_checksum = ack_msg[1] if ack_msg[0] in [
+                            'h'] else None
 
-                        target_file.unlink()
-                    else:
-                        raise zipfile.BadZipFile
-                except zipfile.BadZipFile:
-                    print('Bad Zip File Received!')
-                    sys.exit()
+                        hashsum = md5CheckSum(target_file)
+                        print('File Checksum : ' + str(hashsum))
+                        print('Checksum length : ' + str(len(hashsum)))
+
+                        ack_reply = 'NEQ|' + device_id
+
+                        if server_checksum == hashsum:
+                            ack_reply = 'ACK|' + device_id
+                            if zipfile.is_zipfile(str(target_file)) is True:
+                                # TODO: Handle bad zip files?
+                                pass
+                            else:
+                                raise zipfile.BadZipFile
+                        else:
+                            print('File Hashsum mismatch!')
+
+                        # Send ACK or NEQ (Hashsum not equal message)
+                        global_multicast_socket.sendto(ack_reply.encode(), addr)
+
+                        # Wait for go (g|xxx), abort (a|xxx) or timeout
+                        global_multicast_socket.settimeout(5.0)
+                        start_cmd, addr = global_multicast_socket.recvfrom(
+                            buffer_size)
+                        start_msg = [val.decode() for val in start_cmd.split(b'|')]
+
+                        if start_msg[0] == 's':
+                            with zipfile.ZipFile(str(target_file)) as new_zip:
+                                new_zip.extractall(path=data_dir)
+                        elif start_msg[0] == 'a':
+                            if target_file.exists() is True:
+                                target_file.unlink()
+
+                    except socket.timeout:
+                        print('No ACK from server!')
+                    except zipfile.BadZipFile:
+                        print('Bad Zip File Received!')                
             else:
                 print('File cannot fit into memory!')
                 print('It is advised to leave at least 5% of free disk space')
@@ -126,5 +176,8 @@ while True:
         print(msg)
     finally:
         data_multicast_group = None
+        if target_file.exists() is True:
+            target_file.unlink()
+
 
 

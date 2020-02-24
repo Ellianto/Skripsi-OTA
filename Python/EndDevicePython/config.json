@@ -1,0 +1,9 @@
+{
+    "device_info" : {
+        "type" : "RPi",
+        "cluster" : null,
+        "id" : "target_device_x01"
+    },
+    "gateway_url" : "ota_gateway",
+    "init_api_path" : "/init/device"
+}
