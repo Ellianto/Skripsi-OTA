@@ -52,8 +52,6 @@ def read_config():
         configuration = json.load(config_file)
 
     return configuration
-
-
 # End of File Handling Section
 
 
@@ -63,7 +61,7 @@ def kill_proc_tree(pid, sig=SIGTERM, include_parent=True, timeout=None, on_termi
     """
     Kill a process tree (including grandchildren) with signal
     "sig" and return a (gone, still_alive) tuple.
-    "on_terminate", if specified, is a callabck function which is
+    "on_terminate", if specified, is a callback function which is
     called as soon as a child terminates.
     """
     assert pid != psutil.Process().pid, "won't kill myself"
@@ -80,23 +78,8 @@ def kill_proc_tree(pid, sig=SIGTERM, include_parent=True, timeout=None, on_termi
 
 def run_code():
     return psutil.Popen([sys.executable, constants.paths.SCRIPT_FILE])
-
-
-def apply_update(target_pid):
-    # Empty the TEMP_DIR
-    recursive_rmdir(str(constants.paths.TEMP_DIR))
-
-    # Extract files to tempdir
-    with zipfile.ZipFile(str(constants.paths.TEMP_DATA_FILE)) as new_zip:
-        new_zip.extractall(path=constants.paths.TEMP_DIR)
-
-    kill_proc_tree(target_pid)
-    recursive_rmdir(str(constants.paths.CODE_DIR))
-    replace_code()
-    return run_code()
-
-
 # End of Subprocess Management
+
 
 # Multicast Handling Section
 def create_multicast_socket(target_address, bind_port):
@@ -143,91 +126,158 @@ def receive_multicast_data(mcast_socket, file_size ,buf_size=1024):
 
     return total
 
+
+def apply_update(target_pid):
+        # Empty the TEMP_DIR
+    recursive_rmdir(str(constants.paths.TEMP_DIR))
+
+    # Extract files to tempdir
+    with zipfile.ZipFile(str(constants.paths.TEMP_DATA_FILE)) as new_zip:
+        new_zip.extractall(path=constants.paths.TEMP_DIR)
+
+    kill_proc_tree(target_pid)
+    recursive_rmdir(str(constants.paths.CODE_DIR))
+    replace_code()
+    return run_code()
+    
+
+def should_listen(target_id, device_info, is_cluster=False):
+    return device_info['id' if is_cluster is False else 'cluster'] == target_id
+
 def handle_ota_update(gateway_params, device_info):
     # Initial Run
     proc = run_code()
 
-    global_multicast_socket = create_multicast_socket(gateway_params['cmd_mcast_addr'], gateway_params['g_mcast_port'])
+    global_multicast_socket = create_multicast_socket(gateway_params['cmd_mcast_addr'], gateway_params['cmd_mcast_port'])
     data_multicast_socket = None
 
-    while True:
-        try:
-            cmd_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                    buf_size=gateway_params['buffer_size'],
-                                                    separator=gateway_params['message_separator'])
+    try:
+        while True:
+            try:
+                #! **STANDBY PHASE**
+                #! Standby for gateway instructions 
+                cmd_messages, gateway_addr = listen_command_messages(global_multicast_socket,
+                                                        buf_size=gateway_params['buffer_size'],
+                                                        separator=gateway_params['message_separator'])
 
-            if cmd_messages[0] in ['c', 'd']:
-                should_listen = (
-                    device_info['id'] if cmd_messages[0] == 'd' else device_info['cluster']) == cmd_messages[1]
-            else:
-                raise ValueError
+                #! Ignore if not session initialization message
+                if cmd_messages[0] not in ['c', 'd']:
+                    continue
 
-            file_size = int(cmd_messages[2])
 
-            if should_listen is True:
-                enough_free_space = check_free_space(file_size)
-            else:
-                continue
-
-            if enough_free_space is True:
-                msg_array = [constants.cmd_code.OK, device_info['id']]
-            else:
-                msg_array = [constants.cmd_code.INSUFFICIENT_DISK, device_info['id']]
+                if should_listen(cmd_messages[1], device_info, cmd_messages[1]=='c') is not True:
+                    continue
                 
-            reply_message = gateway_params['message_separator'].join(msg_array)
-            reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
+                file_size = int(cmd_messages[2])
+                enough_free_space = check_free_space(file_size)
+                msg_array = [
+                    constants.cmd_code.OK if enough_free_space is True else constants.cmd_code.INSUFFICIENT_DISK, device_info['id']]
+                    
+                #! Reply about my free size (enough or not enough)
+                reply_message = gateway_params['message_separator'].join(msg_array)
+                reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
 
-            if enough_free_space is not True:
-                print('File cannot fit into memory!')
-                print('It is advised to leave at least 5% of free disk space')
-                continue
+                if enough_free_space is not True:
+                    print('File cannot fit into memory!')
+                    print('It is advised to leave at least 5% of free disk space')
+                    continue
 
-            [data_multicast_addr, data_multicast_port] = cmd_messages[3].split(':')
-            data_multicast_socket = create_multicast_socket(data_multicast_addr, data_multicast_port)
-            transfer_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                    buf_size=gateway_params['buffer_size'],
-                                                                    separator=gateway_params['message_separator'])
+                [data_multicast_addr, data_multicast_port] = cmd_messages[3].split(':')
+                data_multicast_socket = create_multicast_socket(data_multicast_addr, data_multicast_port)
 
-            if transfer_messages[0] != 't':
-                continue
+                listen_transfer = True
 
-            file_received_len = receive_multicast_data(data_multicast_socket, file_size, gateway_params['buffer_size'])
+                #! Poll until transfer/abort command
+                while True:
+                    transfer_messages, gateway_addr = listen_command_messages(global_multicast_socket,
+                                                                            buf_size=gateway_params['buffer_size'],
+                                                                            separator=gateway_params['message_separator'])
 
-            checksum_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                    buf_size=gateway_params['buffer_size'],
-                                                                    separator=gateway_params['message_separator'], 
-                                                                    timeout=3.0)
+                    if should_listen(transfer_messages[1], device_info, cmd_messages[1] == 'c') is not True:
+                        continue
 
-            server_checksum = checksum_messages[1] if checksum_messages[0] in ['h'] else None
+                    listen_transfer = transfer_messages[0] != 'a'
+                    
+                    if transfer_messages[0] in ['t', 'a']:
+                        break
 
-            if server_checksum == md5Checksum(gateway_params['buffer_size']):
-                ack_reply = [constants.cmd_code.ACK, device_info['device_id']]
-            else:
-                ack_reply = [constants.cmd_code.HASHSUM_MISMATCH, device_info['device_id']]
+                if listen_transfer is not True:
+                    print('Aborting Before Transfer Phase...')
+                    continue
 
-            reply_message = gateway_params['message_separator'].join(ack_reply)
-            reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
+                #! **DATA TRANSFER PHASE**
+                #! Receive Files (if not abort)
+                file_received_len = receive_multicast_data(data_multicast_socket, file_size, gateway_params['buffer_size'])
+                do_checksum = True
 
-            start_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                    buf_size=gateway_params['buffer_size'],
-                                                                    separator=gateway_params['message_separator'],
-                                                                    timeout=5.0)
+                #! Poll until checksum/abort command
+                while True:
+                    checksum_messages, gateway_addr = listen_command_messages(global_multicast_socket,
+                                                                            buf_size=gateway_params['buffer_size'],
+                                                                            separator=gateway_params['message_separator'], 
+                                                                            timeout=3.0)
 
-            if start_messages[0] == 's':
-                apply_update(proc.pid)
+                    if should_listen(checksum_messages[1], device_info, cmd_messages[1] == 'c') is not True:
+                        continue
 
-        except ValueError:
-            print('Invalid Message Received!')
-        except sock.timeout:
-            print('Socket timed out!')
-        finally:
-            data_multicast_socket = None
+                    do_checksum = checksum_messages[0] != 'a'                    
 
-            if constants.paths.TEMP_DATA_FILE.exists() is True:
-                constants.paths.TEMP_DATA_FILE.unlink()
+                    if checksum_messages[0] in ['h', 'a']:
+                        break
 
+                if do_checksum is not True:
+                    print('Aborting After Transfer Phase...')
 
+                #! Match Checksum and reply (if not abort)
+                server_checksum = checksum_messages[1]
+                if server_checksum == md5Checksum(gateway_params['buffer_size']):
+                    ack_reply = [constants.cmd_code.ACK, device_info['device_id']]
+                else:
+                    ack_reply = [constants.cmd_code.HASHSUM_MISMATCH, device_info['device_id']]
+
+                reply_message = gateway_params['message_separator'].join(ack_reply)
+                reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
+
+                start_update = True
+
+                #! Poll until startUpdate/abort command
+                while True:
+                    start_messages, gateway_addr = listen_command_messages(global_multicast_socket,
+                                                                            buf_size=gateway_params['buffer_size'],
+                                                                            separator=gateway_params['message_separator'],
+                                                                            timeout=5.0)
+
+                    if should_listen(start_messages[1], device_info, cmd_messages[1] == 'c') is not True:
+                        continue
+
+                    start_update = start_messages[0] == 'a'
+
+                    if start_messages[0] in ['s', 'a']:
+                        break
+
+                #! **UPDATE PHASE**
+                #! Apply update (if not abort)
+                if start_update is True:
+                    apply_update(proc.pid)
+                else:
+                    print('Aborting Update Phase...')
+            except sock.timeout:
+                print('Socket timed out!')
+            finally:
+                if type(data_multicast_socket) is sock.socket:
+                    data_multicast_socket.close()
+
+                data_multicast_socket = None
+
+                if constants.paths.TEMP_DATA_FILE.exists() is True:
+                    constants.paths.TEMP_DATA_FILE.unlink()
+    finally:
+        if type(global_multicast_socket) is sock.socket:
+            global_multicast_socket.close()
+    
+    
 # End of Multicast Handling Section
+
 
 def main():
     configuration = read_config()
@@ -270,3 +320,5 @@ def main():
 if __name__ == '__main__':
     main()
     sys.exit(constants.exit_status.SUCCESS)
+
+# Test This

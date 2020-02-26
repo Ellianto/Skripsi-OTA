@@ -1,49 +1,25 @@
 import json
 from pathlib import Path
 from subprocess import PIPE
+import socket as sock
+import struct
+import hashlib
+import sys
+import time
 
 import psutil
 
 import paho.mqtt.client as mqtt
 import requests
-from voluptuous import All, Coerce, Match, MultipleInvalid, Required, Optional, Schema
+from voluptuous import MultipleInvalid
+import constants
 
-http_error_message = 'HTTP Request Failed! HTTP Error Code '
-connection_error_message = 'Network Problem! Check your (or the server\'s) network connection!'
-timeout_error_message = 'Request Timed Out! Please try again!'
-invalid_json_message = 'Invalid JSON Response From Server!'
+# TODO: Create a simple server
 
-# To use in conjunction with hosts file
-# server = 'http://skripsi_server'
-server_base_url = 'http://192.168.88.169:5000'
-# TODO: set this value based on the 'ifconfig' command
-bind_address = '192.168.88.169'
-
-curr_dir = Path(__file__).parent.absolute()
-
-conf_file_path = curr_dir / 'config.json'
-
-backup_dir = curr_dir / 'backup_data'
-destination_dir = curr_dir / 'main_data'
-
-uftp_dir = curr_dir / 'uftp'
-
-status_file_path = uftp_dir / 'status.txt'
-log_file_path = uftp_dir / 'uftp_client_logfile.txt'
-path_to_uftp_client_exe = uftp_dir / 'uftpd.exe'
-
-# Voluptuous JSON Validator Schema
-configuration_validator = Schema({
-    Optional('status') : Coerce(str),
-    Required('gateway_uid'): All(Coerce(str), Match(r'^0x[0-9A-F]{8}$')),
-    Required('mqtt_topic', default='ota/global') : Coerce(str),
-    Required('mqtt_broker', default='broker.hivemq.com') : Coerce(str),
-    Required('end_device_multicast_addr', default='230.6.6.1'): All(Coerce(str), Match(r'^(22[4-9]|230)(.([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])){3}$')),
-    Required('max_log_size', default='2') :  All(Coerce(str), Match(r'^\d{1,2}$')),
-    Required('max_log_count', default='5') : All(Coerce(str), Match(r'^\d{1,2}$'))
-})
-
+# Globals
 mqtt_client = None
+cmd_mcast_socket = None
+data_mcast_socket = None
 
 # Initializer Functions
 
@@ -55,22 +31,23 @@ def init_conf(retries=2):
         attempts += 1
 
         try:
-            if conf_file_path.exists() is not True:
-                response = requests.get(server_base_url + init_gateway_endpoint)
+            if constants.paths.CONF_FILE_PATH.exists() is not True:
+                response = requests.get(constants.network.INIT_GATEWAY_ENDPOINT)
 
                 if response.raise_for_status() is None:
                     if response.json()['status'] == 'error':
                         continue
 
-                    conf_data = configuration_validator(response.json())
+                    conf_data = constants.json_schema.SERVER_CONF_VALIDATOR(response.json())
 
-                    with conf_file_path.open(mode='w') as conf_file:
+                    with constants.paths.CONF_FILE_PATH.open(mode='w') as conf_file:
                         config = {
                             'mqtt_topic' : conf_data['mqtt_topic'],
                             'mqtt_broker' : conf_data['mqtt_broker'],
                             'gateway_uid' : conf_data['gateway_uid'],
                             'max_log_size' : conf_data['max_log_size'],
                             'max_log_count' : conf_data['max_log_count'],
+                            'buffer_size' : conf_data['buffer_size'],
                             'end_device_multicast_addr' : conf_data['end_device_multicast_addr'],
                         }
 
@@ -80,26 +57,24 @@ def init_conf(retries=2):
                 else:
                     raise requests.HTTPError
 
-            with conf_file_path.open() as conf_file:
-                configuration = json.load(conf_file)
-                conf_data = configuration_validator(configuration)
-                conf_ready = True
+            conf_data = constants.json_schema.SERVER_CONF_VALIDATOR(get_config())
+            conf_ready = True
 
         except requests.HTTPError:
-            print(http_error_message + str(response.status_code) + ' ' + response.reason)
+            print(constants.messages.HTTP_ERROR_MESSAGE)
+            print('HTTP Code : ' + str(response.status_code) + ' ' + response.reason)
         except ConnectionError:
-            print(connection_error_message)
+            print(constants.messages.CONNECTION_ERROR_MESSAGE)
         except TimeoutError:
-            print(timeout_error_message)
-        except ValueError:
-            print(invalid_json_message)
-        except MultipleInvalid:
-            print(invalid_json_message)
+            print(constants.messages.TIMEOUT_ERROR_MESSAGE)
+        except (ValueError, MultipleInvalid):
+            print(constants.messages.INVALID_JSON_MESSAGE)
 
     return conf_ready
 
+
 def init_dirs():
-    dirs = [destination_dir, backup_dir]
+    dirs = [constants.paths.DEST_DIR, constants.paths.BACKUP_DIR]
 
     for dir in dirs:
         if dir.exists() is not True:
@@ -107,28 +82,34 @@ def init_dirs():
             dir.mkdir(parents=True)
         else:
             print('Directory {} checked, exists'.format(str(dir)))
-    def init_conf():
-    pass
+
 
 def init_uftp():
     init_dirs()
     return_code = None
 
-    try:
-        proc_name = 'uftpd.exe'
-        uftpd_instance = next(proc for proc in psutil.process_iter() if proc.name() == proc_name)
-    except StopIteration:
-        with conf_file_path.open() as conf_file:
-            configurations = json.load(conf_file)
+    uftp_dir_exists = constants.paths.UFTP_DIR.exists()
+    uftp_client_exe_exists = constants.paths.UFTP_CLIENT_EXE_PATH.exists()
 
-            uftp_client_cmd = [str(path_to_uftp_client_exe), '-d', '-t',
-                                '-A', str(backup_dir),
-                                '-D', str(destination_dir),
-                                '-L', str(log_file_path),
-                                '-F', str(status_file_path),
-                                '-U', str(configuration['gateway_uid']),
-                                '-g', str(configuration['max_log_size']),
-                                '-n', str(configuration['max_log_count'])]
+    try:
+        if uftp_client_exe_exists is not True or uftp_dir_exists is not True:
+            return_code = 3
+        else:
+            proc_name = 'uftpd.exe'
+            uftpd_instance = next(proc for proc in psutil.process_iter() if proc.name() == proc_name)
+            print('UFTP Client Daemon already running!')
+            return_code = 1
+    except StopIteration:
+        configuration = get_config()
+
+        uftp_client_cmd = [str(constants.paths.UFTP_CLIENT_EXE_PATH), '-d', '-t',
+                            '-A', str(constants.paths.BACKUP_DIR),
+                            '-D', str(constants.paths.DEST_DIR),
+                            '-L', str(constants.paths.LOG_FILE_PATH),
+                            '-F', str(constants.paths.STATUS_FILE_PATH),
+                            '-U', str(configuration['gateway_uid']),
+                            '-g', str(configuration['max_log_size']),
+                            '-n', str(configuration['max_log_count'])]
 
         with psutil.Popen(uftp_client_cmd) as uftp_client_daemon:
             if uftp_client_daemon.is_running() is True:
@@ -142,72 +123,333 @@ def init_uftp():
     except:
         print('Something Happened!')
         raise
-    else:
-        print('UFTP Client Daemon already running!')
-        return_code = 1
 
-    return return_code:
+    return return_code
 
-def init_lwm2m():
-    pass
+
+def init_multicast():
+    rc = 0
+    with constants.paths.CONF_FILE_PATH.open() as conf_file:
+        configuration = json.load(conf_file)
+
+    [cmd_mcast_addr, cmd_mcast_port] = str(configuration['end_device_multicast_addr']).split(':')
+
+    try:
+        cmd_mcast_socket = sock.socket(sock.AF_INET. sock.SOCK_DGRAM)
+        ip_addr = constants.paths.AP_ADDRESS
+        cmd_mcast_socket.bind((ip_addr, cmd_mcast_port))
+    except sock.error:
+        print('Failed to create Multicast Socket!')
+        rc = 1
+
+
+    try:
+        mreq = struct.pack('=4sL', sock.inet_aton(cmd_mcast_addr), sock.INADDR_ANY)
+        cmd_mcast_socket.setsockopt(sock.IPPROTO_IP, sock.IP_ADD_MEMBERSHIP, mreq)
+    except sock.error:
+        print('Failed to join Multicast Group!')
+        rc = 2
+
+    cmd_mcast_socket.settimeout(10)
+    return rc
+
 
 def init_mqtt():
     try:
-        with conf_file_path.open() as conf_file:
-            configuration = json.load(conf_file)
-            mqtt_client = mqtt.Client(client_id=configuration['gateway_uid'])
-            mqtt_client.on_connect = on_mqtt_connect
-            mqtt_client.on_message = on_mqtt_message
+        configuration = get_config()
+        mqtt_client = mqtt.Client(client_id=configuration['gateway_uid'])
+        mqtt_client.on_connect = on_mqtt_connect
+        mqtt_client.on_message = on_mqtt_message
 
-            mqtt_client.will_set(configuration['mqtt_topic'], payload='will|{}'.format(configuration['gateway_uid']))
+        mqtt_client.will_set(configuration['mqtt_topic'], payload='will|{}'.format(configuration['gateway_uid']))
 
-            userdata = {
-                'gateway_id' : configuration['gateway_id']
-            }
+        userdata = {'gateway_id' : configuration['gateway_id']}
 
-            mqtt_client.user_data_set(userdata)
-            mqtt_client.connect(configuration['mqtt_broker'])
-            return True
+        mqtt_client.user_data_set(userdata)
+        mqtt_client.connect(configuration['mqtt_broker'])
+        return True
     except Exception as err:
         print(err)
         return False
 
 # End of initializers
 
-# LWM2M Functions
-def lwm2m_update():
-    pass
+# File Functions
 
+def get_config():
+    with constants.paths.CONFIG_FILE_PATH.open() as config_file:
+        configuration = json.load(config_file)
+    return configuration
+
+
+def get_devices():
+    with constants.paths.DEVICES_FILE_PATH.open() as device_file:
+        devices = json.load(device_file)
+
+    return devices
+
+
+def read_in_chunks(file_obj, chunk_size=buffer_size):
+    while True:
+        chunk_data = file_obj.read(chunk_size)
+        if not chunk_data:
+            break
+
+        yield chunk_data
+
+
+def getFileSize(file_obj):
+    file_obj.seek(0, 2)
+    size = file_obj.tell()
+    file_obj.seek(0)
+    return str(size)
+
+
+def md5Checksum(file_path, block_size=1024):
+    hash = hashlib.md5()
+    with file_path.open(mode='rb') as f:
+        for block in iter(lambda: f.read(block_size), b''):
+            hash.update(block)
+
+    return hash.hexdigest()
+
+
+# End of File Functions
+
+# Multicast Functions
+# Might want to randomize this
+def generate_data_mcast_addr():
+    return ('225.2.2.5', 5222)
+
+def send_mcast_cmd(cmd_arr, dest_addr):
+    cmd_mcast_socket.sendto(
+        (constants.network.CMD_MSG_SEPARATOR.join(cmd_arr)).encode(),
+        dest_addr
+    )
+
+
+def listen_for_reply(mcast_sock, buf_size=1024):
+    reply, addr = mcast_sock.recvfrom(buf_size)
+    print('Reply from ' + addr)
+    return [val.decode() for val in reply.split(constants.network.CMD_MSG_SEPARATOR)]
+
+
+def multicast_update(target_id, is_cluster=False):
+    #! Get requred params and infos
+    devices = get_devices()
+    target_clients = [device['id'] for device in devices['list'] if device['id' if is_cluster is False else 'cluster'] == target_id]
+    abort_msg = [
+        'a',
+        str(target_id)
+    ]
+
+    # So that the usage of this variable in the function
+    # refers to the global variable that has been initialized
+    global cmd_mcast_socket
+
+    configuration = get_config()
+
+    cmd_mcast_addr = str(configuration['end_device_multicast_addr']).split(':')
+    cmd_mcast_group = (cmd_mcast_addr[0], int(cmd_mcast_addr[1]))
+    data_mcast_group = generate_data_mcast_addr()
+
+    # TODO: Make sure the received file from UFTP is in proper naming format ([id].zip)
+    target_file_path = constants.paths.DEST_DIR / ('clusters' if is_cluster is True else 'devices') / (target_id + '.zip')
+    target_file = target_file_path.open(mode='rb')
+    hashsum = md5Checksum(target_file_path)
+
+    #! **MAIN PHASE**
+    #! Send target cluster/device ID and additional info
+    channel_setup_msg = [
+        'c' if is_cluster is True else 'd',
+        str(target_id), 
+        getFileSize(target_file), 
+        ':'.join(map(str, data_mcast_group))
+    ]
+
+    send_mcast_cmd(channel_setup_msg, cmd_mcast_addr)
+
+    clients_ok = False
+    clients_replied = []
+
+    #! Poll for client response
+    while True:
+        try:
+            reply_messages = listen_for_reply(cmd_mcast_socket, buf_size=configuration['buffer_size'])
+
+            if reply_messages[0] == 'OK' and reply_messages[1] in target_clients:
+                clients_replied.append(reply_messages[1])
+            elif clients_replied[0] in ['NO', 'FA']:
+                break
+        except sock.timeout:
+            print('Some clients did not respond!')
+            break
+        except OSError:
+            print('Specified Buffer Size is not enough!')
+            send_mcast_cmd(abort_msg, cmd_mcast_addr)
+            break
+        else:
+            if set(target_clients) == set(clients_replied):
+                clients_ok = True
+                break
+            
+
+    if clients_ok is not True:
+        # Exit early
+        cmd_mcast_socket.sendto((constants.network.CMD_MSG_SEPARATOR.join(abort_msg)).encode(),
+                                cmd_mcast_group)
+        return 1
+
+    #! **DATA TRANSFER PHASE**
+    #! Create Data Mcast Socket
+    try:
+        data_mcast_socket = sock.socket(sock.AF_INET, sock.SOCK_DGRAM)
+    except sock.error:
+        print('Failed to create Data Multicast Socket!')
+        send_mcast_cmd(abort_msg, cmd_mcast_addr)
+        return 2
+
+    #! Tell clients to start listening
+    begin_transfer_msg = [
+        't',
+        str(target_id)
+    ]
+    time.sleep(0.5)
+    send_mcast_cmd(begin_transfer_msg, cmd_mcast_addr)
+    time.sleep(0.5)
+
+    #! Send chunks of file to client
+    for piece in read_in_chunks(target_file):
+        data_mcast_socket.sendto(piece, data_mcast_group)
+        time.sleep(0.03)
+
+    #! Close Data Socket
+    data_mcast_socket.close()
+
+    #! **END PHASE**
+    #! Send File Hashsum for integrity check
+    hashsum_msg = [
+        'h',
+        str(hashsum)
+    ]
+    time.sleep(1)
+    send_mcast_cmd(hashsum_msg, cmd_mcast_addr)
+
+    clients_acked = []
+    transfer_ok = False
+
+    #! Poll for client response
+    while True:
+        try:
+            reply_messages = listen_for_reply(
+                cmd_mcast_socket, buf_size=configuration['buffer_size'])
+
+            if reply_messages[0] == 'ACK' and reply_messages[1] in target_clients:
+                clients_replied.append(reply_messages[1])
+            elif clients_replied[0] in ['NEQ']:
+                break
+        except sock.timeout:
+            print('Some clients failed to ACK')
+            break
+        except OSError:
+            print('Specified Buffer size is not enough!')
+            send_mcast_cmd(abort_msg, cmd_mcast_addr)
+            break
+        else:
+            if set(clients_acked) == set(clients_replied):
+                transfer_ok = True
+                break
+
+    if transfer_ok is not True:
+        send_mcast_cmd(abort_msg, cmd_mcast_addr)
+        return 2
+
+    #! Tell them to replace the old code or to actually do the update
+    apply_update_msg = [
+        's',
+        str(target_id)
+    ]
+
+    send_mcast_cmd(apply_update_msg, cmd_mcast_addr)
+    time.sleep(3)
+    #! To force stop any "hanging clients"
+    send_mcast_cmd(abort_msg, cmd_mcast_addr)
+    return 0
+
+# Fires when a device "registers/initializes"
+# Reply with addresses and other infos
+# And send init data to server telling this device is initializing
+# Also, save the client data into local
+# TODO: Use HTTP base?
 def end_device_connect_callback():
-    pass
+    # Fetch JSON data from end device request
+    # TODO: Validate using voluptuous?
+    json_data = {}
+    configuration = get_config()
 
-def end_device_disconnect_callback():
-    pass
+    # Send Request to server first
+    try:
+        response = requests.post(constants.network.INIT_DEVICE_ENDPOINT, json={
+            'gateway' : str(configuration['gateway_uid']),
+            **json_data
+        })
 
-# End of LWM2M Functions
+        if response.raise_for_status() is None:
+            pass
+        else:
+            raise requests.HTTPError
+    except requests.HTTPError:
+        print(constants.messages.HTTP_ERROR_MESSAGE)
+        print('HTTP Code : ' + str(response.status_code) +
+                ' ' + response.reason)
+    except ConnectionError:
+        print(constants.messages.CONNECTION_ERROR_MESSAGE)
+    except TimeoutError:
+        print(constants.messages.TIMEOUT_ERROR_MESSAGE)
+    except (ValueError, MultipleInvalid):
+        print(constants.messages.INVALID_JSON_MESSAGE)
+    
+    
+    # If Response is okay, then continue
+
+    devices_file_exists = constants.paths.DEVICES_FILE_PATH.exists()
+
+    if devices_file_exists is True:
+        json_list = get_devices()
+        json_list['list'].append(json_data)
+    else:
+        json_list = {'list' : [json_data]}
+
+    # Write to devices.json
+    with constants.paths.DEVICES_FILE_PATH.open(mode='w') as devices_file:
+        json.dump(json_list, devices_file, skipkeys=True,
+                  ensure_ascii=True, indent=4)
+
+    # Reply to end-device regardless of successfully connected to server or not
+    [cmd_mcast_addr, cmd_mcast_port] = str(
+        configuration['end_device_multicast_addr']).split(':')
+
+    json_reply = {
+        'buffer_size' : configuration['buffer_size'],
+        'message_separator' : constants.network.CMD_MSG_SEPARATOR,
+        'cmd_mcast_addr' : cmd_mcast_addr,
+        'cmd_mcast_port' : cmd_mcast_port
+    }
+
+
+# End of Multicast Functions
 
 # MQTT Functions
 def on_mqtt_connect(client, userdata, flags, rc):
     if rc == 0:
-        with conf_file_path.open() as conf_file:
-            configuration = json.load(conf_file)
-            print('Successfully connected to ' + configuration['mqtt_broker'])
-            (result, mid) = mqtt_client.subscribe(
+        configuration = get_config()
+        (result, mid) = mqtt_client.subscribe(
                 configuration['mqtt_topic'], qos=2)
-
-    elif rc == 1:
-        print('Incorrect Protocol Version detected when connecting to MQTT Broker')
-    elif rc == 2:
-        print('Invalid Client ID detected when connecting to MQTT Broker')
-    elif rc == 3:
-        print('MQTT Server/Broker is unavailable when connecting to MQTT Broker')
-    elif rc == 4:
-        print('Bad Username/Password detected when connecting to MQTT Broker')
-    elif rc == 5:
-        print('Failed to Authorize when connecting to MQTT Broker')
+    
+    if rc in range(len(constants.mqtt.RETURN_CODE_MESSAGES)):
+        print(constants.mqtt.RETURN_CODE_MESSAGES[rc])
     else:
-        print('Invalid Return Code (' + str(rc) +
-                ') when connecting to MQTT Broker')
+        print(constants.mqtt.INVALID_RETURN_CODE)
 
 
 def on_mqtt_message(client, userdata, msg):
@@ -216,23 +458,34 @@ def on_mqtt_message(client, userdata, msg):
 
     mqtt_message = msg.payload.decode().split('|')
 
-    if mqtt_message[0] == 'update':
+    if mqtt_message[0] == constants.mqtt.UPDATE_CODE:
         target_id = str(mqtt_message[2])
+        # TODO: Inspect Return code (if fail, probably report to an endpoint)
+        multicast_update(target_id, is_cluster=(mqtt_message[1] == 'cluster'))
 
-        if mqtt_message[1] == 'cluster':
-            pass
-        elif mqtt_message[1] == 'device':
-            pass
 # End of MQTT Functions
 
+
+# CLI Entry point
 if __name__ == '__main__':
-    if init_conf() is not True:
-        print('Error while getting configuration from Server!')
-    elif init_uftp() is not in [0, 1]:
-        print('Error while starting UFTP Client Daemon!')
-    elif init_lwm2m() is not True:
-        print('Error while initializing LWM2M Server!')
-    elif init_mqtt() is not True:
-        print('Error while initializing MQTT Client!')
-    else:
-        mqtt_client.loop_forever()
+    rc = 0
+    try:
+        if init_conf() is not True:
+            print('Error while getting configuration from Server!')
+            rc = 1
+        elif init_uftp() not in [0, 1]:
+            print('Error while starting UFTP Client Daemon!')
+            rc = 2
+        elif init_multicast() not in [0]:
+            print('Error while initializing Multicast Socket!')
+            rc = 3
+        elif init_mqtt() is not True:
+            print('Error while initializing MQTT Client!')
+            rc = 4
+        else:
+            mqtt_client.loop_forever()
+    finally:
+        if type(cmd_mcast_socket) is sock.socket:
+            cmd_mcast_socket.close()
+
+    sys.exit(rc)

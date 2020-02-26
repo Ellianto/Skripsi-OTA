@@ -78,7 +78,7 @@ try:
     init_msg = 'c|target_cluster_x01|{}|{}'.format(
         str(size), ':'.join(map(str, data_multicast_group)))
 
-    command_multicast_socket.sendto(str.encode(init_msg), global_multicast_group)
+    command_multicast_socket.sendto(init_msg.encode(), global_multicast_group)
 
     clients_ok = False
     clients_replied = []

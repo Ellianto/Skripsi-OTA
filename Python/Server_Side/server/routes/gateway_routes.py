@@ -133,6 +133,7 @@ def initialize_gateway():
         status_response['end_device_multicast_addr'] = constants.uftp.END_DEVICE_MULTICAST_ADDR
         status_response['max_log_size'] = constants.uftp.MAX_LOG_SIZE
         status_response['max_log_count'] = constants.uftp.MAX_LOG_COUNT
+        status_response['buffer_size'] = 1024 # Buffer size for gateway-endDevice multicast comms
     except:
         status_response['status'] = constants.strings.STATUS_CODE_ERROR
         status_response['message'] = 'Error while initializing gateway!'
