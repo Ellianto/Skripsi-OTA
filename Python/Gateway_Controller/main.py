@@ -221,6 +221,7 @@ def md5Checksum(file_path, block_size=1024):
 def generate_data_mcast_addr():
     return ('225.2.2.5', 5222)
 
+
 def send_mcast_cmd(cmd_arr, dest_addr):
     cmd_mcast_socket.sendto(
         (constants.network.CMD_MSG_SEPARATOR.join(cmd_arr)).encode(),
@@ -253,8 +254,8 @@ def multicast_update(target_id, is_cluster=False):
     cmd_mcast_group = (cmd_mcast_addr[0], int(cmd_mcast_addr[1]))
     data_mcast_group = generate_data_mcast_addr()
 
-    # TODO: Make sure the received file from UFTP is in proper naming format ([id].zip)
-    target_file_path = constants.paths.DEST_DIR / ('clusters' if is_cluster is True else 'devices') / (target_id + '.zip')
+    # TODO: Check if the path is correct when testing
+    target_file_path = constants.paths.DEST_DIR / ('clusters' if is_cluster is True else 'devices') / target_id /  (target_id + '.zip')
     target_file = target_file_path.open(mode='rb')
     hashsum = md5Checksum(target_file_path)
 
@@ -461,7 +462,9 @@ def on_mqtt_message(client, userdata, msg):
     if mqtt_message[0] == constants.mqtt.UPDATE_CODE:
         target_id = str(mqtt_message[2])
         # TODO: Inspect Return code (if fail, probably report to an endpoint)
-        multicast_update(target_id, is_cluster=(mqtt_message[1] == 'cluster'))
+        multicast_update(target_id, is_cluster=(str(mqtt_message[1]) == 'cluster'))
+    elif mqtt_message[0] == constants.mqtt.DEVICE_CODE:
+        pass
 
 # End of MQTT Functions
 

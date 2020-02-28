@@ -10,3 +10,4 @@ RETURN_CODE_MESSAGES=[
 INVALID_RETURN_CODE = 'Invalid Return Code!'
 
 UPDATE_CODE = 'update'
+DEVICE_CODE = 'device'

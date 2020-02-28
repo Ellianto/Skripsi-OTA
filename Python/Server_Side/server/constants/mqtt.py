@@ -7,3 +7,8 @@ MQTT_BROKER_URL  = 'broker.hivemq.com'
 MQTT_BROKER_PORT = 1883
 MQTT_KEEPALIVE   = 5
 MQTT_TLS_ENABLED = False
+
+UPDATE_CODE = 'update'
+DEVICE_CODE = 'device'
+
+CMD_SEPARATOR = '|'

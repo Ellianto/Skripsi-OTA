@@ -1,4 +1,5 @@
 import psutil
+import shutil
 
 import server.constants as constants
 import server.internal_handlers.helpers as helper
@@ -11,6 +12,9 @@ Before running, the file(s) to be sent must be prepared in a directory with this
 For example, with the default BASE_DIR (./data/) and target cluster ID of "example_cluster":
 ./data/cluster/example_cluster
 """
+
+def compress_to_zip():
+    pass
 
 def check_uftp_server_instance():
     proc_name = 'uftp.exe'
@@ -47,15 +51,17 @@ def initialize_params(target_id, is_cluster=False):
     if target_dir is not None:
         if target_dir.exists() is not True:
             init_obj['status_code'] = constants.strings.STATUS_CODE_MISSING_DATA
-            init_obj['message'] = 'Target directory not found!'
+            init_obj['message'] = 'Target file not found!'
         elif len(gateway_ids) == 0:
             init_obj['status_code'] = constants.strings.STATUS_CODE_UNINITIALIZED
             init_obj['message'] = 'Target Device/Cluster has not been initialized yet!'
         else:
             init_obj['status_code'] = constants.strings.STATUS_CODE_SUCCESS
             init_obj['message'] = 'Parameter Initialization Successful!'
+
+            shutil.make_archive(str(target_dir / target_id), 'zip', str(target_dir))
     
-    init_obj['target_dir'] = None if target_dir is None else str(target_dir)
+    init_obj['target_file'] = None if target_dir is None else str(target_dir / (target_id + '.zip'))
     init_obj['gateway_ids'] = gateway_ids
 
     return init_obj
@@ -103,7 +109,7 @@ def parse_status_file():
     }
 
 
-def run_uftp_server(gateway_ids, target_dir, retries=2):
+def run_uftp_server(gateway_ids, target_file, retries=2):
     session_list = []
     success = None
     hostlist = ','.join(gateway_id for gateway_id in gateway_ids)
@@ -116,7 +122,7 @@ def run_uftp_server(gateway_ids, target_dir, retries=2):
         status_data = {}
 
         try:
-            with psutil.Popen(constants.uftp.UFTP_SERVER_CMD + [hostlist, target_dir]) as uftp_server:
+            with psutil.Popen(constants.uftp.UFTP_SERVER_CMD + [hostlist, target_file]) as uftp_server:
                 return_code = uftp_server.wait(timeout=constants.uftp.PROCESS_TIMEOUT)
 
             if return_code in [1, 2, 3, 4, 5, 6, 9]:
@@ -155,9 +161,9 @@ def distribute_updated_code(target_id, is_cluster=False, retries=2):
             if params['status_code'] == constants.strings.STATUS_CODE_SUCCESS:
                 session_info = {}
                 session_info['gateway_list'] = params['gateway_ids']
-                session_info['target_dir'] = params['target_dir']
+                session_info['target_file'] = params['target_file']
 
-                success, session_report = run_uftp_server(params['gateway_ids'], params['target_dir'], retries=retries)
+                success, session_report = run_uftp_server(params['gateway_ids'], params['target_file'], retries=retries)
 
                 session_info['session_report'] = session_report
                 status_response['session_info'] = session_info
