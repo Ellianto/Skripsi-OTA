@@ -9,60 +9,59 @@
 
 #include <ArduinoJson.h>
 #include "FS.h"
+// It's better to use StaticJsonDocument ofr limited RAM devices
+// You can approx. the size by pasting the JSON to https://arduinojson.org/v6/assistant/
 
-bool loadConfig() {
-  File configFile = SPIFFS.open("/config.json", "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file");
-    return false;
-  }
+#define STATIC_JSON_SIZE 256
+#define JSON_FILE_LIMIT 512
 
-  size_t size = configFile.size();
-  if (size > 1024) {
-    Serial.println("Config file size is too large");
-    return false;
-  }
+#define JSON_FILE_NAME "/config.json"
 
-  // Allocate a buffer to store contents of the file.
-  std::unique_ptr<char[]> buf(new char[size]);
+#define DEVICE_TYPE "ESP"
 
-  // We don't use String here because ArduinoJson library requires the input
-  // buffer to be mutable. If you don't use ArduinoJson, you may as well
-  // use configFile.readString instead.
-  configFile.readBytes(buf.get(), size);
+bool saveConfig()
+{
+  StaticJsonDocument<STATIC_JSON_SIZE> doc;
 
-  StaticJsonDocument<200> doc;
-  auto error = deserializeJson(doc, buf.get());
-  if (error) {
-    Serial.println("Failed to parse config file");
-    return false;
-  }
+  // Format based on config.json in EndDevicePython
+  // TODO: Change this if the config.json is changed
+  doc["gateway"] = "ota_gateway";
+  doc["init_api"] = "/init/device";
 
-  const char* serverName = doc["serverName"];
-  const char* accessToken = doc["accessToken"];
+  JsonObject device = doc.createNestedObject("device");
+  device["id"] = "target_device_x01";
+  device["type"] = DEVICE_TYPE;
+  device["cluster"] = nullptr;
 
-  // Real world application would store these values in some variables for
-  // later use.
-
-  Serial.print("Loaded serverName: ");
-  Serial.println(serverName);
-  Serial.print("Loaded accessToken: ");
-  Serial.println(accessToken);
-  return true;
-}
-
-bool saveConfig() {
-  StaticJsonDocument<200> doc;
-  doc["serverName"] = "api.example.com";
-  doc["accessToken"] = "128du9as8du12eoue8da98h123ueh9h98";
-
-  File configFile = SPIFFS.open("/config.json", "w");
-  if (!configFile) {
+  File configFile = SPIFFS.open(JSON_FILE_NAME, "w");
+  if (!configFile)
+  {
     Serial.println("Failed to open config file for writing");
     return false;
   }
 
   serializeJson(doc, configFile);
+  return true;
+}
+
+// Try to re-read the config file to ensure it is correctly formatted and saved
+bool loadConfig() {
+  File configFile = SPIFFS.open(JSON_FILE_NAME, "r");
+  if (!configFile) {
+    Serial.println("Failed to open config file");
+    return false;
+  }
+
+  StaticJsonDocument<STATIC_JSON_SIZE> doc;
+  auto error = deserializeJson(doc, configFile);
+  if (error) {
+    Serial.println("Failed to parse config file");
+    return false;
+  } else {
+    // Print to Serial to inform developer of read result
+    serializeJsonPretty(doc, Serial);
+  }
+
   return true;
 }
 
@@ -83,6 +82,7 @@ void setup() {
   } else {
     Serial.println("Config saved");
   }
+  Serial.println("");
 
   if (!loadConfig()) {
     Serial.println("Failed to load config");

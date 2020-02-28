@@ -299,14 +299,14 @@ def main():
 
     # Send Initialization request to gateway address
     try:
-        response = requests.post(configuration['gateway_url'] + configuration['init_api_path'], json=configuration['device_info'])
+        response = requests.post(configuration['gateway'] + configuration['init_api'], json=configuration['device'])
 
         if response.raise_for_status() is None:
             json_data = response.json()
             # TODO: Validate JSON Response with Voluptuous
 
             if json_data['status'] == 'success':
-                handle_ota_update(response.json(), configuration['device_info'])
+                handle_ota_update(response.json(), configuration['device'])
             else:
                 print(json_data)
                 sys.exit(constants.exit_status.GATEWAY_FAILURE)
