@@ -1,0 +1,3 @@
+USE THIS COMMAND FOR REMOTE COMMAND EXECUTION via SSH! (needs putty's plink)
+
+plink pi@raspberrypigw01 -pw teknik_komputer "rm /home/pi/gateway_code/test.txt;"

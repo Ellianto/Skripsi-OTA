@@ -19,6 +19,7 @@
 
 #define DEVICE_TYPE "ESP"
 
+//Save the config.json to SPIFFS for persistent storage
 bool saveConfig()
 {
   StaticJsonDocument<STATIC_JSON_SIZE> doc;
@@ -75,7 +76,6 @@ void setup() {
     Serial.println("Failed to mount file system");
     return;
   }
-
 
   if (!saveConfig()) {
     Serial.println("Failed to save config");

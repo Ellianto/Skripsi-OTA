@@ -38,7 +38,7 @@ def handle_main_menu():
     choices = [ '0. Quit',
                 '1. Update Firmware',
                 '2. Register Device/Cluster',
-                '3. Delete Device/Cluster']
+                '3. Delete Device/Cluster (coming soon!)']
     return menu_printer(title, choices)
 
 

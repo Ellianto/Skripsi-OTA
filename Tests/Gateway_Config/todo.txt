@@ -1,0 +1,129 @@
+This TODO will explain the steps required to setup the Raspberry Pi as Gateway/Controller 
+~tested with Raspberry Pi 3 Model B+ running Raspbian Buster 2020-02-13
+
+* Ensure Raspberry Pi can be connected to network successfully!
+
+* Run updates and reboot before starting any config
+
+    >$ sudo su
+    >$ apt update && apt full-upgrade 
+    >$ reboot
+
+1. run "sudo raspi-config"
+2. Update the raspi-config tool
+3. Change "pi" user password to "teknik_komputer"
+4. Change device hostname to "raspberrypi-[gw/ed]-[2 digit number]"
+5. Set predictable interface names
+6. Activate SSH (just in case)
+
+* From here on, everything will be run as root
+ 
+7. Change root password to "root"
+note: Default password for "pi" is "raspberry", and "root" has no default password
+
+    >$ sudo su
+    >$ passwd  # shell will immediately prompt new password (because no password by default)
+
+8. Install and start hostapd
+
+    >$ apt-get install hostapd -y
+    >$ systemctl unmask hostapd
+    >$ systemctl enable hostapd
+
+9. Disable the default debian networking and dhcpcd services
+
+    >$ systemctl mask networking.service dhcpcd.service
+    >$ mv /etc/network/interfaces /etc/network/interfaces~
+    >$ sed -i '1i resolvconf=NO' /etc/resolvconf.conf
+
+10.Enable systemd.networkd
+
+    >$ systemctl enable systemd-networkd.service systemd-resolved.service
+    >$ ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+11.Setup hostapd for Access Point (replace the parameters in square brackets with the appropriate value)
+    note: check the channel used in wlan0 or whatever wireless interface is currently connected to internet
+
+    >$ iwlist channel  # Check the appropriate interface, and look at the Current Frequency Channel value
+    >$ nano /etc/hostapd/hostapd.conf
+
+    fill it with these details:
+
+        interface=ap0
+        driver=nl80211
+        ssid=[your_ap_ssid_here]
+        country_code=ID
+        hw_mode=g
+        channel=[insert_channel_value]
+        auth_algs=1
+        wpa=2
+        wpa_passphrase=[your_ap_pass_here]
+        wpa_key_mgmt=WPA-PSK
+        wpa_pairwise=TKIP
+        rsn_pairwise=CCMP
+
+    >$ chmod 600 /etc/hostapd/hostapd.conf
+    >$ sed -i 's/^#DAEMON_CONF=.*$/DAEMON_CONF="\/etc\/hostapd\/hostapd.conf"/' /etc/default/hostapd
+    >$ systemctl --full edit hostapd.service 
+
+    The last command will prompt a text editor. Comment the "After=network.target" line by appending
+    a # at the beginning of the line. Save and exit.
+
+    >$ systemctl edit hostapd.service
+
+    This will also prompt a text editor, but to an empty text. Add these lines to the text:
+
+        [Unit]
+        Wants=wpa_supplicant@wlan0.service
+
+        [Service]
+        ExecStartPre=/sbin/iw dev wlan0 interface add ap0 type __ap
+        ExecStopPost=-/sbin/iw dev ap0 del
+
+12. Setup wpa_supplicant.conf
+    note: you can create a new one, or make a copy of the original wpa_supplicant and add to it
+
+    >$ nano /etc/wpa_supplicant/wpa_supplicant-wlan0.conf # for creating a new one
+        OR
+    >$ cp /etc/wpa_supplicant/wpa_supplicant.conf /etc/wpa_supplicant/wpa_supplicant-wlan0.conf # for copying
+
+    >$ chmod 600 /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+    >$ systemctl disable wpa_supplicant.service
+    >$ systemctl enable wpa_supplicant@wlan0.service
+    >$ systemctl edit wpa_supplicant@wlan0.service
+
+    The last command will prompt a text editor showing an empty file. Append these:
+
+        [Unit]
+        BindsTo=hostapd.service
+        After=hostapd.service
+
+        [Service]
+        ExecStartPost=/sbin/iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+        ExecStopPost=-/sbin/iptables -t nat -D POSTROUTING -o wlan0 -j MASQUERADE
+
+13. Setup static interfaces and reboot
+
+    >$ nano /etc/systemd/network/08-wlan0.network # prompts an empty text editor
+
+    Append the text below to the new file:
+
+        [Match]
+        Name=wlan0
+        [Network]
+        IPForward=yes
+        DHCP=yes
+
+    >$ nano /etc/systemd/network/12-ap0.network # prompts an empty text editor
+
+    Append the text below to the new file:
+
+        [Match]
+        Name=ap0
+        [Network]
+        Address=192.168.66.1/24 # Fill this with the Address for AP0. It will also be the address pool for the clients
+        DHCPServer=yes
+        [DHCPServer]
+        DNS=84.200.69.80 1.1.1.1 8.8.8.8
+
+    >$ reboot

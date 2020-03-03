@@ -381,7 +381,7 @@ def multicast_update(target_id, is_cluster=False):
 # Reply with addresses and other infos
 # And send init data to server telling this device is initializing
 # Also, save the client data into local
-# TODO: Use HTTP base?
+# TODO: run in background as a separate process
 def end_device_connect_callback():
     # Fetch JSON data from end device request
     # TODO: Validate using voluptuous?
@@ -462,7 +462,16 @@ def on_mqtt_message(client, userdata, msg):
     if mqtt_message[0] == constants.mqtt.UPDATE_CODE:
         target_id = str(mqtt_message[2])
         # TODO: Inspect Return code (if fail, probably report to an endpoint)
-        multicast_update(target_id, is_cluster=(str(mqtt_message[1]) == 'cluster'))
+        attempts = 0
+        messages = ['Success!', 'Some target clients failed to connect!', 'Data Transfer not successful!']
+
+        for attempts in range(3):
+            return_code = multicast_update(target_id, is_cluster=(str(mqtt_message[1]) == 'cluster'))
+            print('Multicast Firmware Update returns ' + str(return_code))
+            print(messages[return_code])
+            if return_code in [0]:
+                break
+
     elif mqtt_message[0] == constants.mqtt.DEVICE_CODE:
         pass
 

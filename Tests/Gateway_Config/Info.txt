@@ -1,0 +1,8 @@
+SSH credentials:
+username -> pi
+passwd   -> teknik_komputer
+
+IP Address : 192.168.66.1/24 as Gateway's static IP
+DHCP Range : 192.168.66.2-254 for host pool address
+SSID       : PI_GW_[2 digit number]
+Password   : teknik_komputer
