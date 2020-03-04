@@ -45,11 +45,32 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
         >$ apt install -y libnss-resolve
         >$ ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 
-    d. Make sure D-Bus software interface is running
+    d. Also, configure this to prevent DNSSEC failure
+
+        >$ nano /etc/systemd/resolved.conf
+
+        Edit it so it looks like this:
+
+            [Resolve]
+            DNS=8.8.8.8
+            FallbackDNS=1.1.1.1
+            #Domains=
+            LLMNR=yes
+            MulticastDNS=yes
+            DNSSEC=allow-downgrade
+            #DNSOverTLS=no
+            #Cache=yes
+            DNSStubListener=yes
+            ReadEtcHosts=yes
+
+        >$ systemctl restart systemd-resolved.service
+        >$ systemctl status systemd-resolved.service
+
+    e. Make sure D-Bus software interface is running
         >$ systemctl status dbus.service
         >$ systemctl enable dbus.service # starts it if not running
 
-    e. Continued in step 14...
+    f. Continued in step 14...
 
     Failure in fully migrating might mess with the name resolution 
     (especially problematic when SSH with hostname)
