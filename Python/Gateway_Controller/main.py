@@ -82,6 +82,7 @@ def init_device_to_file(json_data):
                 json.dump(clusters_list, clusters_file, skipkeys=True,
                         ensure_ascii=True, indent=4)
 
+
 class MyTCPHandler(socketserver.BaseRequestHandler):
     """
     The request handler class for our server.
@@ -231,7 +232,7 @@ def init_uftp():
         if uftp_client_exe_exists is not True or uftp_dir_exists is not True:
             return_code = 3
         else:
-            proc_name = 'uftpd.exe'
+            proc_name = 'uftpd'
             uftpd_instance = next(proc for proc in psutil.process_iter() if proc.name() == proc_name)
             print('UFTP Client Daemon already running!')
             return_code = 1
@@ -295,24 +296,21 @@ def init_multicast():
 
 def init_mqtt():
     print('Initializing MQTT Client...')
-
+    rc = False
     try:
         configuration = get_config()
-        mqtt_client = mqtt.Client(client_id=configuration['gateway_uid'])
+        mqtt_client = mqtt.Client(configuration['gateway_uid'])
         mqtt_client.on_connect = on_mqtt_connect
         mqtt_client.on_message = on_mqtt_message
 
-        mqtt_client.will_set(configuration['mqtt_topic'], payload='will|{}'.format(configuration['gateway_uid']))
-
-        userdata = {'gateway_uid' : configuration['gateway_uid']}
-
-        mqtt_client.user_data_set(userdata)
         mqtt_client.connect(configuration['mqtt_broker'])
         mqtt_client.loop_start()
-        return True
+        rc = True
     except Exception as err:
         print(err)
-        return False
+        # raise
+
+    return rc
 
 # End of initializers
 
@@ -600,7 +598,8 @@ if __name__ == '__main__':
                 server.serve_forever()
 
     finally:
-        if type(cmd_mcast_socket) is sock.socket:
+        if cmd_mcast_socket is not None:
+            configuration = get_config()
             [cmd_mcast_addr, cmd_mcast_port] = str(configuration['end_device_multicast_addr']).split(':')
 
             mreq = struct.pack('=4sL', sock.inet_aton(cmd_mcast_addr), sock.INADDR_ANY)
@@ -610,5 +609,6 @@ if __name__ == '__main__':
 
         if mqtt_client is not None:
             mqtt_client.loop_stop()
+            mqtt_client.disconnect()
 
     sys.exit(rc)
