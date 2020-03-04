@@ -100,7 +100,6 @@ def create_multicast_socket(target_address, bind_port):
     return mcast_sock
 
 
-
 def listen_command_messages(mcast_sock, buf_size=1024, separator='|', timeout=None):
     mcast_sock.settimeout(timeout)
     msg, addr = mcast_sock.recvfrom(buf_size)
