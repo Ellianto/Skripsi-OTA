@@ -15,4 +15,4 @@ UFTP_CLIENT_EXE_PATH = UFTP_DIR / 'uftpd.exe'
 # Config file
 CONF_FILE_PATH = CURR_DIR / 'config.json'
 DEVICES_FILE_PATH = CURR_DIR / 'devices.json'
-
+CLUSTERS_FILE_PATH = CURR_DIR / 'clusters.json'

@@ -1,25 +1,143 @@
-import json
-from pathlib import Path
-from subprocess import PIPE
-import socket as sock
-import struct
 import hashlib
+import json
+import socket as sock
+import socketserver
+import struct
 import sys
 import time
+from pathlib import Path
+from subprocess import PIPE
 
 import psutil
 
+import constants
 import paho.mqtt.client as mqtt
 import requests
 from voluptuous import MultipleInvalid
-import constants
-
-# TODO: Create a simple server
 
 # Globals
 mqtt_client = None
 cmd_mcast_socket = None
 data_mcast_socket = None
+
+def init_device_to_server(json_data):
+    status = False
+
+    try:
+        response = requests.post(constants.network.INIT_DEVICE_ENDPOINT, json=json_data)
+
+        if response.raise_for_status() is None:
+            json_response = constants.json_schema.SERVER_RESPONSE_VALIDATOR(response.json())
+            status = json_response['status'] == 'success'
+        else:
+            raise requests.HTTPError
+    except requests.HTTPError:
+        print(constants.messages.HTTP_ERROR_MESSAGE)
+        print('HTTP Code : ' + str(response.status_code) + ' ' + response.reason)
+    except ConnectionError:
+        print(constants.messages.CONNECTION_ERROR_MESSAGE)
+    except TimeoutError:
+        print(constants.messages.TIMEOUT_ERROR_MESSAGE)
+    except (ValueError, MultipleInvalid):
+        print(constants.messages.INVALID_JSON_MESSAGE)
+
+    return status
+
+# TODO: Do something with mismatching type later
+def init_device_to_file(json_data):
+    # Add to devices.json
+    devices_list = get_devices()
+    device_exists = next((device for device in devices_list['data'] if device['id'] == json_data['id']), None) is not None
+
+    if device_exists is not True:
+        devices_list['data'].append(json_data)
+
+        # Write to devices.json
+        with constants.paths.DEVICES_FILE_PATH.open(mode='w') as devices_file:
+            json.dump(devices_list, devices_file, skipkeys=True,
+                        ensure_ascii=True, indent=4)
+
+        # Add to clusters.json if cluster member
+        if json_data['cluster'] is not None:
+            clusters_list = get_clusters()
+            cluster_idx = next((idx for idx, cluster in enumerate(clusters_list['data']) if cluster['id'] == json_data['cluster']), None)
+            
+            if cluster_idx is None:
+                # Cluster not in list, append
+                clusters_list['data'].append({
+                    'id' : json_data['cluster'],
+                    'type' : json_data['type'],
+                    'devices' : [json_data['id']]
+                })
+
+            else:
+                device_in_cluster = json_data['id'] in clusters_list['data'][cluster_idx]['devices']
+
+                if device_in_cluster is not True:
+                    clusters_list['data'][cluster_idx]['devices'].append(json_data['id'])
+
+            # Write to clusters.json
+            with constants.paths.CLUSTERS_FILE_PATH.open(mode='w') as clusters_file:
+                json.dump(clusters_list, clusters_file, skipkeys=True,
+                        ensure_ascii=True, indent=4)
+
+class MyTCPHandler(socketserver.BaseRequestHandler):
+    """
+    The request handler class for our server.
+
+    It is instantiated once per connection to the server, and must
+    override the handle() method to implement communication to the
+    client.
+    """
+
+    def handle(self):
+        # self.request is the TCP socket connected to the client
+        self.data = self.request.recv(1024).decode().strip().split('|')
+        print("{} wrote:".format(self.client_address[0]))
+        print(self.data)
+        # just send back the same data, but upper-cased
+        self.request.sendall(self.data.upper())
+
+        configuration = get_config()
+        self.data = constants.json_schema.END_DEVICE_CONF_VALIDATOR(json.loads(self.request.recv(configuration['buffer_size'])))
+
+        # Defaults to rejected
+        self.reply_json = {
+            'status': 'rejected'
+        }
+
+        if self.data['code'] in ['INIT']:
+            device_data = {
+                'id' : self.data['id'],
+                'cluster' : self.data['cluster'],
+                'type' : self.data['type'] 
+            }
+
+            # Forward to Server
+            init_success = init_device_to_server({
+                'gateway': str(configuration['gateway_uid']),
+                **device_data
+            })
+
+            if init_success is True:
+                init_device_to_file(device_data)
+                
+                # Reply Back to client
+                [cmd_mcast_addr, cmd_mcast_port] = str(
+                    configuration['end_device_multicast_addr']).split(':')
+
+                self.reply_json = {
+                    'status': 'success',
+                    'buffer': configuration['buffer_size'],
+                    'msg_separator': constants.network.CMD_MSG_SEPARATOR,
+                    'cmd_mcast_addr': cmd_mcast_addr,
+                    'cmd_mcast_port': cmd_mcast_port
+                }
+            else:
+                self.reply_json = {'status' : 'failed'}
+
+        self.request.sendall(json.dumps(self.reply_json).encode())
+
 
 # Initializer Functions
 
@@ -73,19 +191,31 @@ def init_conf(retries=2):
     return conf_ready
 
 
-def init_dirs():
+def init_dirs_and_json_files():
     dirs = [constants.paths.DEST_DIR, constants.paths.BACKUP_DIR]
+    json_files = [constants.paths.DEVICES_FILE_PATH, constants.paths.CLUSTERS_FILE_PATH]
+
+    init_json = {'data' : []}
 
     for dir in dirs:
         if dir.exists() is not True:
-            print('Directory {} not detected, creating directory...'.format(str(dir)))
+            print('Directory {} not detected! Creating...'.format(str(dir)))
             dir.mkdir(parents=True)
         else:
             print('Directory {} checked, exists'.format(str(dir)))
 
+    for json_file in json_files:
+        if json_file.exists() is not True:
+            print('JSON file {} missing! Creating...'.format(str(json_file)))
+
+            with json_file.open(mode='w') as file:
+                json.dump(init_json, file, indent=4, ensure_ascii=True)
+        else:
+            print('JSON File {} checked, exists!'.format(str(json_file)))
+
 
 def init_uftp():
-    init_dirs()
+    init_dirs_and_json_files()
     return_code = None
 
     uftp_dir_exists = constants.paths.UFTP_DIR.exists()
@@ -167,6 +297,7 @@ def init_mqtt():
 
         mqtt_client.user_data_set(userdata)
         mqtt_client.connect(configuration['mqtt_broker'])
+        mqtt_client.loop_start()
         return True
     except Exception as err:
         print(err)
@@ -183,10 +314,17 @@ def get_config():
 
 
 def get_devices():
-    with constants.paths.DEVICES_FILE_PATH.open() as device_file:
-        devices = json.load(device_file)
+    with constants.paths.DEVICES_FILE_PATH.open() as devices_file:
+        devices = json.load(devices_file)
 
     return devices
+
+
+def get_clusters():
+    with constants.paths.CLUSTERS_FILE_PATH.open() as clusters_file:
+        clusters = json.load(clusters_file)
+
+    return clusters
 
 
 def read_in_chunks(file_obj, chunk_size=buffer_size):
@@ -217,7 +355,7 @@ def md5Checksum(file_path, block_size=1024):
 # End of File Functions
 
 # Multicast Functions
-# Might want to randomize this
+# TODO: Might want to randomize this
 def generate_data_mcast_addr():
     return ('225.2.2.5', 5222)
 
@@ -238,7 +376,7 @@ def listen_for_reply(mcast_sock, buf_size=1024):
 def multicast_update(target_id, is_cluster=False):
     #! Get requred params and infos
     devices = get_devices()
-    target_clients = [device['id'] for device in devices['list'] if device['id' if is_cluster is False else 'cluster'] == target_id]
+    target_clients = [device['id'] for device in devices['data'] if device['id' if is_cluster is False else 'cluster'] == target_id]
     abort_msg = [
         'a',
         str(target_id)
@@ -377,66 +515,6 @@ def multicast_update(target_id, is_cluster=False):
     send_mcast_cmd(abort_msg, cmd_mcast_addr)
     return 0
 
-# Fires when a device "registers/initializes"
-# Reply with addresses and other infos
-# And send init data to server telling this device is initializing
-# Also, save the client data into local
-# TODO: run in background as a separate process
-def end_device_connect_callback():
-    # Fetch JSON data from end device request
-    # TODO: Validate using voluptuous?
-    json_data = {}
-    configuration = get_config()
-
-    # Send Request to server first
-    try:
-        response = requests.post(constants.network.INIT_DEVICE_ENDPOINT, json={
-            'gateway' : str(configuration['gateway_uid']),
-            **json_data
-        })
-
-        if response.raise_for_status() is None:
-            pass
-        else:
-            raise requests.HTTPError
-    except requests.HTTPError:
-        print(constants.messages.HTTP_ERROR_MESSAGE)
-        print('HTTP Code : ' + str(response.status_code) +
-                ' ' + response.reason)
-    except ConnectionError:
-        print(constants.messages.CONNECTION_ERROR_MESSAGE)
-    except TimeoutError:
-        print(constants.messages.TIMEOUT_ERROR_MESSAGE)
-    except (ValueError, MultipleInvalid):
-        print(constants.messages.INVALID_JSON_MESSAGE)
-    
-    
-    # If Response is okay, then continue
-
-    devices_file_exists = constants.paths.DEVICES_FILE_PATH.exists()
-
-    if devices_file_exists is True:
-        json_list = get_devices()
-        json_list['list'].append(json_data)
-    else:
-        json_list = {'list' : [json_data]}
-
-    # Write to devices.json
-    with constants.paths.DEVICES_FILE_PATH.open(mode='w') as devices_file:
-        json.dump(json_list, devices_file, skipkeys=True,
-                  ensure_ascii=True, indent=4)
-
-    # Reply to end-device regardless of successfully connected to server or not
-    [cmd_mcast_addr, cmd_mcast_port] = str(
-        configuration['end_device_multicast_addr']).split(':')
-
-    json_reply = {
-        'buffer_size' : configuration['buffer_size'],
-        'message_separator' : constants.network.CMD_MSG_SEPARATOR,
-        'cmd_mcast_addr' : cmd_mcast_addr,
-        'cmd_mcast_port' : cmd_mcast_port
-    }
-
 
 # End of Multicast Functions
 
@@ -481,6 +559,7 @@ def on_mqtt_message(client, userdata, msg):
 # CLI Entry point
 if __name__ == '__main__':
     rc = 0
+
     try:
         if init_conf() is not True:
             print('Error while getting configuration from Server!')
@@ -495,9 +574,16 @@ if __name__ == '__main__':
             print('Error while initializing MQTT Client!')
             rc = 4
         else:
-            mqtt_client.loop_forever()
+            with socketserver.TCPServer(('', 6666), MyTCPHandler) as server:
+                # Activate the server; this will keep running until you
+                # interrupt the program with Ctrl-C
+                server.serve_forever()
+
     finally:
         if type(cmd_mcast_socket) is sock.socket:
             cmd_mcast_socket.close()
+
+        if mqtt_client is not None:
+            mqtt_client.loop_stop()
 
     sys.exit(rc)
