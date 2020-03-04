@@ -10,24 +10,17 @@ from server.internal_handlers import file_io, helpers
 def generate_gateway_uid():
     gateways = file_io.read_gateways()
 
-    while True:
+    attempts = 0
+
+    for attempts in range(10000000):
+        attempts += 1
         random_hexa_uid = '0x%08X' % random.randrange(16**8)
         gateway_exists = next((
-            gateway['id'] for gateway in gateways['data']), None)
+            gateway['id'] for gateway in gateways['data'] if gateway['id'] == random_hexa_uid), None)
 
         if gateway_exists is None:
             break
 
-    new_gateway = {
-        "id": random_hexa_uid,
-        "list": {
-            "cluster": [],
-            "device": [],
-        }
-    }
-
-    gateways['data'].append(new_gateway)
-    file_io.write_gateways(gateways)
     return random_hexa_uid
 
 

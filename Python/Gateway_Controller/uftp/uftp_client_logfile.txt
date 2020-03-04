@@ -1,0 +1,2 @@
+2020/03/04 12:31:29.500416: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/04 12:31:29.501087: Loaded 512 bit RSA key with fingerprint 5F:10:70:4C:07:3E:77:02:4D:64:DC:38:D1:80:7B:85:E4:B5:13:2D

@@ -3,11 +3,16 @@ This TODO will explain the steps required to setup the Raspberry Pi as Gateway/C
 
 * Ensure Raspberry Pi can be connected to network successfully!
 
-* Run updates and reboot before starting any config
+* Run updates, and reboot before starting any config
 
     >$ sudo su
     >$ apt update && apt full-upgrade 
     >$ reboot
+
+* Ensure the required python apt packages are installed and pointed to correctly! (this system uses Python 3.7)
+
+    >$ sudo su
+    >$ apt-get install python3.7 python3-pip python3-venv 
 
 1. run "sudo raspi-config"
 2. Update the raspi-config tool
@@ -24,24 +29,53 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
     >$ sudo su
     >$ passwd  # shell will immediately prompt new password (because no password by default)
 
-8. Install and start hostapd
+8. Configure network settings to use systemd-networkd
+
+    >$ sudo su 
+
+    a. Remove Classic Debian networking tools (dhcpcd, ifupdown)
+        >$ apt --autoremove purge ifupdown dhcpcd5 isc-dhcp-client isc-dhcp-common rsyslog avahi-daemon
+        >$ rm -r /etc/network/ /etc/dhcp/
+
+    b. Enable systemd-networkd and systemd-resolved
+        >$ systemctl enable systemd-networkd.service
+        >$ systemctl enable systemd-resovled.service
+
+    c. Configure systemd-resolved interfaces for network name resolution
+        >$ apt install -y libnss-resolve
+        >$ ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+
+    d. Make sure D-Bus software interface is running
+        >$ systemctl status dbus.service
+        >$ systemctl enable dbus.service # starts it if not running
+
+    e. Continued in step 14...
+
+    Failure in fully migrating might mess with the name resolution 
+    (especially problematic when SSH with hostname)
+
+9. Install and start hostapd
 
     >$ apt-get install hostapd -y
     >$ systemctl unmask hostapd
     >$ systemctl enable hostapd
 
-9. Disable the default debian networking and dhcpcd services
+10. Disable the default debian networking and dhcpcd services
 
     >$ systemctl mask networking.service dhcpcd.service
     >$ mv /etc/network/interfaces /etc/network/interfaces~
     >$ sed -i '1i resolvconf=NO' /etc/resolvconf.conf
 
-10.Enable systemd.networkd
+11. Make sure systemd.networkd and system.resolved is running
+    note: run the "systemctl enable xxx" command only if the service is not running!
 
-    >$ systemctl enable systemd-networkd.service systemd-resolved.service
+    >$ systemctl status systemd-networkd.service 
+    >$ systemctl enable systemd-networkd.service 
+    >$ systemctl status systemd-networkd.service 
+    >$ systemctl enable systemd-resolved.service
     >$ ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
 
-11.Setup hostapd for Access Point (replace the parameters in square brackets with the appropriate value)
+12. Setup hostapd for Access Point (replace the parameters in square brackets with the appropriate value)
     note: check the channel used in wlan0 or whatever wireless interface is currently connected to internet
 
     >$ iwlist channel  # Check the appropriate interface, and look at the Current Frequency Channel value
@@ -80,7 +114,7 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
         ExecStartPre=/sbin/iw dev wlan0 interface add ap0 type __ap
         ExecStopPost=-/sbin/iw dev ap0 del
 
-12. Setup wpa_supplicant.conf
+13. Setup wpa_supplicant.conf
     note: you can create a new one, or make a copy of the original wpa_supplicant and add to it
 
     >$ nano /etc/wpa_supplicant/wpa_supplicant-wlan0.conf # for creating a new one
@@ -102,17 +136,18 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
         ExecStartPost=/sbin/iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
         ExecStopPost=-/sbin/iptables -t nat -D POSTROUTING -o wlan0 -j MASQUERADE
 
-13. Setup static interfaces and reboot
+14. Setup static interfaces and reboot
 
     >$ nano /etc/systemd/network/08-wlan0.network # prompts an empty text editor
 
-    Append the text below to the new file:
+    Append the text below to the new file: (continuation of step 8e)
 
         [Match]
         Name=wlan0
         [Network]
         IPForward=yes
         DHCP=yes
+        MulticastDNS=yes
 
     >$ nano /etc/systemd/network/12-ap0.network # prompts an empty text editor
 

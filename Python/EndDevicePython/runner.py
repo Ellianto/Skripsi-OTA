@@ -100,6 +100,7 @@ def create_multicast_socket(target_address, bind_port):
     return mcast_sock
 
 
+
 def listen_command_messages(mcast_sock, buf_size=1024, separator='|', timeout=None):
     mcast_sock.settimeout(timeout)
     msg, addr = mcast_sock.recvfrom(buf_size)
@@ -265,6 +266,10 @@ def handle_ota_update(gateway_params, device_info):
                 print('Socket timed out!')
             finally:
                 if type(data_multicast_socket) is sock.socket:
+                    data_mreq = struct.pack('=4sL', sock.inet_aton(
+                        data_multicast_addr), sock.INADDR_ANY)
+                    data_multicast_socket.setsockopt(
+                        sock.IPPROTO_IP, sock.IP_DROP_MEMBERSHIP, data_mreq)
                     data_multicast_socket.close()
 
                 data_multicast_socket = None
@@ -273,6 +278,11 @@ def handle_ota_update(gateway_params, device_info):
                     constants.paths.TEMP_DATA_FILE.unlink()
     finally:
         if type(global_multicast_socket) is sock.socket:
+            cmd_mreq = struct.pack('=4sL', sock.inet_aton(
+                gateway_params['cmd_mcast_addr']), sock.INADDR_ANY)
+            global_multicast_socket.setsockopt(
+                sock.IPPROTO_IP, sock.IP_DROP_MEMBERSHIP, cmd_mreq)
+
             global_multicast_socket.close()
     
     

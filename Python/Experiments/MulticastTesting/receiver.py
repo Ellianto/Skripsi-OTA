@@ -29,7 +29,9 @@ udp_receiver.bind(server_address)
 group = socket.inet_aton(multicast_addr)
 mreq = struct.pack('=4sL', group, socket.INADDR_ANY) #INADDR_ANY means to listen to all interface
 # Sets the Socket Option
+# TODO: Don't forget to drop membership when done!
 udp_receiver.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+# udp_receiver.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP, mreq)
 
 """
     =4sL is struct.pack() specific used for specifying the byte format

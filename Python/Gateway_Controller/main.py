@@ -20,6 +20,7 @@ mqtt_client = None
 cmd_mcast_socket = None
 data_mcast_socket = None
 
+
 def init_device_to_server(json_data):
     status = False
 
@@ -141,7 +142,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
 # Initializer Functions
 
-def init_conf(retries=2):
+def init_conf(retries=0):
+    print('Initializing Configuration...')
     conf_ready = False
     attempts = 0
 
@@ -149,6 +151,7 @@ def init_conf(retries=2):
         attempts += 1
 
         try:
+
             if constants.paths.CONF_FILE_PATH.exists() is not True:
                 response = requests.get(constants.network.INIT_GATEWAY_ENDPOINT)
 
@@ -175,7 +178,6 @@ def init_conf(retries=2):
                 else:
                     raise requests.HTTPError
 
-            conf_data = constants.json_schema.SERVER_CONF_VALIDATOR(get_config())
             conf_ready = True
 
         except requests.HTTPError:
@@ -192,8 +194,10 @@ def init_conf(retries=2):
 
 
 def init_dirs_and_json_files():
-    dirs = [constants.paths.DEST_DIR, constants.paths.BACKUP_DIR]
-    json_files = [constants.paths.DEVICES_FILE_PATH, constants.paths.CLUSTERS_FILE_PATH]
+    print('Initializing Directories and JSON Files...')
+
+    dirs = constants.paths.DIR_LIST
+    json_files = constants.paths.JSON_FILE_LIST
 
     init_json = {'data' : []}
 
@@ -215,6 +219,8 @@ def init_dirs_and_json_files():
 
 
 def init_uftp():
+    print('Initializing UFTP Client daemon...')
+
     init_dirs_and_json_files()
     return_code = None
 
@@ -232,7 +238,7 @@ def init_uftp():
     except StopIteration:
         configuration = get_config()
 
-        uftp_client_cmd = [str(constants.paths.UFTP_CLIENT_EXE_PATH), '-d', '-t',
+        uftp_client_cmd = [str(constants.paths.UFTP_CLIENT_EXE_PATH), '-t',
                             '-A', str(constants.paths.BACKUP_DIR),
                             '-D', str(constants.paths.DEST_DIR),
                             '-L', str(constants.paths.LOG_FILE_PATH),
@@ -258,6 +264,9 @@ def init_uftp():
 
 
 def init_multicast():
+    print('Initializing Multicast Socket...')
+
+
     rc = 0
     with constants.paths.CONF_FILE_PATH.open() as conf_file:
         configuration = json.load(conf_file)
@@ -265,9 +274,9 @@ def init_multicast():
     [cmd_mcast_addr, cmd_mcast_port] = str(configuration['end_device_multicast_addr']).split(':')
 
     try:
-        cmd_mcast_socket = sock.socket(sock.AF_INET. sock.SOCK_DGRAM)
-        ip_addr = constants.paths.AP_ADDRESS
-        cmd_mcast_socket.bind((ip_addr, cmd_mcast_port))
+        cmd_mcast_socket = sock.socket(sock.AF_INET, sock.SOCK_DGRAM)
+        ip_addr = constants.network.AP_ADDRESS
+        cmd_mcast_socket.bind((ip_addr, int(cmd_mcast_port)))
     except sock.error:
         print('Failed to create Multicast Socket!')
         rc = 1
@@ -285,6 +294,8 @@ def init_multicast():
 
 
 def init_mqtt():
+    print('Initializing MQTT Client...')
+
     try:
         configuration = get_config()
         mqtt_client = mqtt.Client(client_id=configuration['gateway_uid'])
@@ -293,7 +304,7 @@ def init_mqtt():
 
         mqtt_client.will_set(configuration['mqtt_topic'], payload='will|{}'.format(configuration['gateway_uid']))
 
-        userdata = {'gateway_id' : configuration['gateway_id']}
+        userdata = {'gateway_uid' : configuration['gateway_uid']}
 
         mqtt_client.user_data_set(userdata)
         mqtt_client.connect(configuration['mqtt_broker'])
@@ -308,7 +319,7 @@ def init_mqtt():
 # File Functions
 
 def get_config():
-    with constants.paths.CONFIG_FILE_PATH.open() as config_file:
+    with constants.paths.CONF_FILE_PATH.open() as config_file:
         configuration = json.load(config_file)
     return configuration
 
@@ -327,7 +338,7 @@ def get_clusters():
     return clusters
 
 
-def read_in_chunks(file_obj, chunk_size=buffer_size):
+def read_in_chunks(file_obj, chunk_size=1024):
     while True:
         chunk_data = file_obj.read(chunk_size)
         if not chunk_data:
@@ -355,7 +366,7 @@ def md5Checksum(file_path, block_size=1024):
 # End of File Functions
 
 # Multicast Functions
-# TODO: Might want to randomize this
+# TODO: Randomize this later
 def generate_data_mcast_addr():
     return ('225.2.2.5', 5222)
 
@@ -524,6 +535,14 @@ def on_mqtt_connect(client, userdata, flags, rc):
         configuration = get_config()
         (result, mid) = mqtt_client.subscribe(
                 configuration['mqtt_topic'], qos=2)
+
+        if result == mqtt.MQTT_ERR_SUCCESS:
+            active_msg = [
+                'init',
+                configuration['gateway_uid']
+            ]
+
+            mqtt_client.publish(configuration['mqtt_topic'], constants.network.CMD_MSG_SEPARATOR.join(active_msg).encode())
     
     if rc in range(len(constants.mqtt.RETURN_CODE_MESSAGES)):
         print(constants.mqtt.RETURN_CODE_MESSAGES[rc])
@@ -535,11 +554,11 @@ def on_mqtt_message(client, userdata, msg):
     print("Message Received from topic " + str(
         msg.topic) + ' : ' + str(msg.payload.decode()))
 
-    mqtt_message = msg.payload.decode().split('|')
+    mqtt_message = msg.payload.decode().split(constants.network.CMD_MSG_SEPARATOR)
 
     if mqtt_message[0] == constants.mqtt.UPDATE_CODE:
         target_id = str(mqtt_message[2])
-        # TODO: Inspect Return code (if fail, probably report to an endpoint)
+        # TODO: Inspect Return code (if fail, probably report to an endpoint) later
         attempts = 0
         messages = ['Success!', 'Some target clients failed to connect!', 'Data Transfer not successful!']
 
@@ -574,13 +593,19 @@ if __name__ == '__main__':
             print('Error while initializing MQTT Client!')
             rc = 4
         else:
-            with socketserver.TCPServer(('', 6666), MyTCPHandler) as server:
+            print('Starting TCP Socket Server...')
+            with socketserver.TCPServer((constants.network.AP_ADDRESS, 6666), MyTCPHandler) as server:
                 # Activate the server; this will keep running until you
                 # interrupt the program with Ctrl-C
                 server.serve_forever()
 
     finally:
         if type(cmd_mcast_socket) is sock.socket:
+            [cmd_mcast_addr, cmd_mcast_port] = str(configuration['end_device_multicast_addr']).split(':')
+
+            mreq = struct.pack('=4sL', sock.inet_aton(cmd_mcast_addr), sock.INADDR_ANY)
+            cmd_mcast_socket.setsockopt(sock.IPPROTO_IP, sock.IP_DROP_MEMBERSHIP, mreq)
+
             cmd_mcast_socket.close()
 
         if mqtt_client is not None:

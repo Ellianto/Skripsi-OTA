@@ -7,9 +7,11 @@ import json
 from pathlib import Path
 
 # Double parent because of "package" structure
+# Imported in constants.py
 ROOT_DIR = Path(__file__).parent.parent.absolute()
-# TODO: Handle delete event for gateway/controller side
-# TODO: Handle disconnect event, if possible
+
+# TODO: Handle delete event for gateway/controller side later
+# TODO: Handle disconnect event, if possible later
 
 import server.constants as constants
 
@@ -39,8 +41,8 @@ def create_app(test_config=None):
         # load the test config if passed in
         app.config.from_mapping(test_config)
 
-    init_files()
     init_dirs()
+    init_files()
 
     return app
 
