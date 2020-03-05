@@ -144,7 +144,9 @@ def apply_update(target_pid):
 def should_listen(target_id, device_info, is_cluster=False):
     return device_info['id' if is_cluster is False else 'cluster'] == target_id
 
+
 def handle_ota_update(gateway_params, device_info):
+    #! **START PHASE**
     # Initial Run
     proc = run_code()
 
@@ -187,6 +189,7 @@ def handle_ota_update(gateway_params, device_info):
 
                 listen_transfer = True
 
+                #! **TRANSFER PHASE**
                 #! Poll until transfer/abort command
                 while True:
                     transfer_messages, gateway_addr = listen_command_messages(global_multicast_socket,
@@ -205,11 +208,11 @@ def handle_ota_update(gateway_params, device_info):
                     print('Aborting Before Transfer Phase...')
                     continue
 
-                #! **DATA TRANSFER PHASE**
                 #! Receive Files (if not abort)
                 file_received_len = receive_multicast_data(data_multicast_socket, file_size, gateway_params['buffer_size'])
                 do_checksum = True
 
+                #! **VERIFICATION PHASE**
                 #! Poll until checksum/abort command
                 while True:
                     checksum_messages, gateway_addr = listen_command_messages(global_multicast_socket,
@@ -240,6 +243,7 @@ def handle_ota_update(gateway_params, device_info):
 
                 start_update = True
 
+                #! **END PHASE**
                 #! Poll until startUpdate/abort command
                 while True:
                     start_messages, gateway_addr = listen_command_messages(global_multicast_socket,
@@ -255,7 +259,6 @@ def handle_ota_update(gateway_params, device_info):
                     if start_messages[0] in ['s', 'a']:
                         break
 
-                #! **UPDATE PHASE**
                 #! Apply update (if not abort)
                 if start_update is True:
                     apply_update(proc.pid)
@@ -289,6 +292,9 @@ def handle_ota_update(gateway_params, device_info):
 
 
 def main():
+    # Reads config.json for device and cluster ID
+    # This assumes the RPi is already connected to the Gateway Network
+    # TODO: Match with the ESP's flow if possible
     configuration = read_config()
 
     # Check existence appropriate script file
@@ -308,6 +314,7 @@ def main():
 
     # Send Initialization request to gateway address
     try:
+        # TODO: Interact with TCP Socket in gateway for runtime parameters
         response = requests.post(configuration['gateway'] + configuration['init_api'], json=configuration['device'])
 
         if response.raise_for_status() is None:

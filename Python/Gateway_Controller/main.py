@@ -93,20 +93,14 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     """
 
     def handle(self):
-        # self.request is the TCP socket connected to the client
-        self.data = self.request.recv(1024).decode().strip().split('|')
-        print("{} wrote:".format(self.client_address[0]))
-        print(self.data)
-        # just send back the same data, but upper-cased
-        self.request.sendall(self.data.upper())
-
         configuration = get_config()
-        self.data = constants.json_schema.END_DEVICE_CONF_VALIDATOR(json.loads(self.request.recv(configuration['buffer_size'])))
+        # Note that the serialized JSON needs to be newline terminated
+        received_json = json.loads(self.request.readline().strip())
+        self.data = constants.json_schema.END_DEVICE_CONF_VALIDATOR(
+            received_json)
 
         # Defaults to rejected
-        self.reply_json = {
-            'status': 'rejected'
-        }
+        self.reply_json = {'status': 'rejected'}
 
         if self.data['code'] in ['INIT']:
             device_data = {
@@ -138,7 +132,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             else:
                 self.reply_json = {'status' : 'failed'}
 
-        self.request.sendall(json.dumps(self.reply_json).encode())
+        # The reply is also newline terminated
+        self.request.sendall(json.dumps(self.reply_json) + '\n')
 
 
 # Initializer Functions

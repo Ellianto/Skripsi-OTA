@@ -9,7 +9,7 @@
 
 #include <ArduinoJson.h>
 #include "FS.h"
-// It's better to use StaticJsonDocument ofr limited RAM devices
+// It's better to use StaticJsonDocument for limited RAM devices
 // You can approx. the size by pasting the JSON to https://arduinojson.org/v6/assistant/
 
 #define STATIC_JSON_SIZE 256
@@ -32,7 +32,7 @@ bool saveConfig()
   JsonObject device = doc.createNestedObject("device");
   device["id"] = "target_device_x01";
   device["type"] = DEVICE_TYPE;
-  device["cluster"] = nullptr;
+  device["cluster"] = NULL;
 
   File configFile = SPIFFS.open(JSON_FILE_NAME, "w");
   if (!configFile)
