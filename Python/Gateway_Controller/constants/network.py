@@ -1,7 +1,7 @@
 import netifaces as ni
 
 # Server Base URL Should be used in conjunction with modifications to hosts file
-
+MTU_SIZE = 1460
 SERVER_PORT = 9999
 
 SERVER_BASE_URL = 'http://skripsi_server:' + str(SERVER_PORT) + '/'

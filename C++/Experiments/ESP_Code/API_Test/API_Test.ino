@@ -113,6 +113,33 @@ const char * const EVENT_REASONS_200[] {
   "REASON_NO_AP_FOUND"
 };
 
+#define TEST 3456
+#define NANI "this is just a test"
+#define GILA_BAT_LU 2783.252152
+#define KOSONG_NI NULL
+
+const char* temp_global = "nani the hell";
+const char* empty_string = "";
+const char* bunch_o_spaces = "      ";
+
+int dis_a_global = TEST;
+float dis_also_global = GILA_BAT_LU;
+
+int useless_function(){
+  int temp = 13 + TEST;
+
+  temp -= 10;
+   return temp*2;
+}
+
+float another_one(){
+  float nani = 2.7193;
+  nani += GILA_BAT_LU;
+  nani *= 3;
+
+  return nani;
+}
+
 void wifi_event_handler_cb(System_Event_t * event) {
   ehConsolePort.print(EVENT_NAMES[event->event]);
   ehConsolePort.print(" (");
@@ -209,6 +236,27 @@ void print_system_info(Stream & consolePort) {
 
   consolePort.print(F("system_get_flash_size_map(): "));
   consolePort.println(FLASH_SIZE_MAP_NAMES[system_get_flash_size_map()]);
+
+  consolePort.print("ESP.getFlashChipMode() : ");
+  consolePort.println(ESP.getFlashChipMode());
+
+  consolePort.print("ESP.getFlashChipSize() : ");
+  consolePort.println(ESP.getFlashChipSize());
+
+  consolePort.print("ESP.getFlashChipRealSize() : ");
+  consolePort.println(ESP.getFlashChipRealSize());
+
+  consolePort.print("ESP.getFlashChipSizeByChipId() : ");
+  consolePort.println(ESP.getFlashChipSizeByChipId());
+
+  consolePort.print("ESP.getFreeHeap() : ");
+  consolePort.println(ESP.getFreeHeap());
+
+  consolePort.print("ESP.getFreeSketchSpace() : ");
+  consolePort.println(ESP.getFreeSketchSpace());
+
+  consolePort.print("ESP.getSketchSize() : ");
+  consolePort.println(ESP.getSketchSize());
 }
 
 void print_wifi_general(Stream & consolePort) {
@@ -289,6 +337,11 @@ void setup() {
 }
 
 void loop() {
+  for(int idx = 0; idx < 2; idx++){
+    dis_a_global = idx + useless_function();
+    dis_also_global = useless_function();
+  }
+  
   Serial.print(F("system_get_time(): "));
   Serial.println(system_get_time());
   delay(1000);

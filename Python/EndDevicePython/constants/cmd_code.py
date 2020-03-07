@@ -1,7 +1,4 @@
 """
-    Initialization Code:
-    -> INIT: Initialize device with these parameters
-
     Reply Codes to send:
     -> Main Phase:
         OK : Ready for file transfer (sufficient free space)
@@ -13,11 +10,9 @@
         NEQ : Files hashsum doesn't match
 """
 
-INIT = 'INIT'
-
 OK = 'OK'
 FAILED = 'FA'
 INSUFFICIENT_DISK = 'NO'
 
 ACK = 'ACK'
-HASHSUM_MISMATCH = 'NEQ'
+CHECKSUM_MISMATCH = 'NEQ'

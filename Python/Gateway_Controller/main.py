@@ -340,14 +340,14 @@ def read_in_chunks(file_obj, chunk_size=1024):
         yield chunk_data
 
 
-def getFileSize(file_obj):
+def get_file_size(file_obj):
     file_obj.seek(0, 2)
     size = file_obj.tell()
     file_obj.seek(0)
     return str(size)
 
 
-def md5Checksum(file_path, block_size=1024):
+def md5_checksum(file_path, block_size=1024):
     hash = hashlib.md5()
     with file_path.open(mode='rb') as f:
         for block in iter(lambda: f.read(block_size), b''):
@@ -366,7 +366,7 @@ def generate_data_mcast_addr():
 
 def send_mcast_cmd(cmd_arr, dest_addr):
     cmd_mcast_socket.sendto(
-        (constants.network.CMD_MSG_SEPARATOR.join(cmd_arr)).encode(),
+        (constants.network.CMD_MSG_SEPARATOR.join(cmd_arr) + '\n').encode(),
         dest_addr
     )
 
@@ -379,18 +379,19 @@ def listen_for_reply(mcast_sock, buf_size=1024):
 
 def multicast_update(target_id, is_cluster=False):
     #! Get requred params and infos
+    configuration = get_config()
+
     devices = get_devices()
     target_clients = [device['id'] for device in devices['data'] if device['id' if is_cluster is False else 'cluster'] == target_id]
     abort_msg = [
         'a',
-        str(target_id)
+        str(target_id),
+        configuration['gateway_uid']
     ]
 
     # So that the usage of this variable in the function
     # refers to the global variable that has been initialized
     global cmd_mcast_socket
-
-    configuration = get_config()
 
     cmd_mcast_addr = str(configuration['end_device_multicast_addr']).split(':')
     cmd_mcast_group = (cmd_mcast_addr[0], int(cmd_mcast_addr[1]))
@@ -399,15 +400,16 @@ def multicast_update(target_id, is_cluster=False):
     # TODO: Check if the path is correct when testing
     target_file_path = constants.paths.DEST_DIR / ('clusters' if is_cluster is True else 'devices') / target_id /  (target_id + '.zip')
     target_file = target_file_path.open(mode='rb')
-    hashsum = md5Checksum(target_file_path)
+    checksum = md5_checksum(target_file_path)
 
-    #! **MAIN PHASE**
+    #! **STANDBY PHASE**
     #! Send target cluster/device ID and additional info
     channel_setup_msg = [
         'c' if is_cluster is True else 'd',
         str(target_id), 
-        getFileSize(target_file), 
-        ':'.join(map(str, data_mcast_group))
+        get_file_size(target_file), 
+        data_mcast_group[0],
+        data_mcast_group[1]
     ]
 
     send_mcast_cmd(channel_setup_msg, cmd_mcast_addr)
@@ -416,12 +418,22 @@ def multicast_update(target_id, is_cluster=False):
     clients_replied = []
 
     #! Poll for client response
+    # Expected message format : [OK or NO or FA]|[device_id]|[possible_buffer_size]\n
+    max_buffer_size = 0
     while True:
         try:
             reply_messages = listen_for_reply(cmd_mcast_socket, buf_size=configuration['buffer_size'])
 
             if reply_messages[0] == 'OK' and reply_messages[1] in target_clients:
                 clients_replied.append(reply_messages[1])
+
+                client_buffer_size = reply_messages[2]
+
+                more_buffer = max_buffer_size < client_buffer_size
+                mtu_acceptable = constants.network.MTU_SIZE >= client_buffer_size
+
+                if (more_buffer and mtu_acceptable):
+                    max_buffer_size = client_buffer_size
             elif clients_replied[0] in ['NO', 'FA']:
                 break
         except sock.timeout:
@@ -436,14 +448,13 @@ def multicast_update(target_id, is_cluster=False):
                 clients_ok = True
                 break
             
-
+    #! If not all clients are OK, send abort
     if clients_ok is not True:
         # Exit early
         cmd_mcast_socket.sendto((constants.network.CMD_MSG_SEPARATOR.join(abort_msg)).encode(),
                                 cmd_mcast_group)
         return 1
 
-    #! **DATA TRANSFER PHASE**
     #! Create Data Mcast Socket
     try:
         data_mcast_socket = sock.socket(sock.AF_INET, sock.SOCK_DGRAM)
@@ -452,11 +463,14 @@ def multicast_update(target_id, is_cluster=False):
         send_mcast_cmd(abort_msg, cmd_mcast_addr)
         return 2
 
+    #! **TRANSFER PHASE**
     #! Tell clients to start listening
     begin_transfer_msg = [
         't',
-        str(target_id)
+        str(target_id),
+        max_buffer_size
     ]
+
     time.sleep(0.5)
     send_mcast_cmd(begin_transfer_msg, cmd_mcast_addr)
     time.sleep(0.5)
@@ -469,19 +483,23 @@ def multicast_update(target_id, is_cluster=False):
     #! Close Data Socket
     data_mcast_socket.close()
 
-    #! **END PHASE**
-    #! Send File Hashsum for integrity check
-    hashsum_msg = [
+    #! **VERIFICATION PHASE**
+    #! Send File checksum for integrity check
+    checksum_msg = [
         'h',
-        str(hashsum)
+        str(target_id),
+        str(checksum)
     ]
+
+    # Wait for blocking clients
     time.sleep(1)
-    send_mcast_cmd(hashsum_msg, cmd_mcast_addr)
+    send_mcast_cmd(checksum_msg, cmd_mcast_addr)
 
     clients_acked = []
     transfer_ok = False
 
     #! Poll for client response
+    # Expected message format : [ACK or NEQ]|[device_id]\n
     while True:
         try:
             reply_messages = listen_for_reply(
@@ -507,10 +525,12 @@ def multicast_update(target_id, is_cluster=False):
         send_mcast_cmd(abort_msg, cmd_mcast_addr)
         return 2
 
+    #! **END PHASE**
     #! Tell them to replace the old code or to actually do the update
     apply_update_msg = [
         's',
-        str(target_id)
+        str(target_id),
+        configuration['gateway_uid']
     ]
 
     send_mcast_cmd(apply_update_msg, cmd_mcast_addr)

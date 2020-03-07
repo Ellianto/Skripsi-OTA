@@ -5,12 +5,18 @@
 #include <ArduinoJson.h>
 #include "FS.h"
 
-// For UDP Multicast Listener Setup
-#include <WiFiUdp.h>
-#include <UdpContext.h>
-#include <lwip/igmp.h>
-#include <IPAddress.h>
 
+// For UDP Multicast Listener Setup
+#include "lwip/ip_addr.h"
+#include "lwip/ip4_addr.h"
+#include "lwip/igmp.h"
+#include "lwip/udp.h"
+#include "lwip/inet.h"
+#include "include/UdpContext.h"
+
+// Firmware Update Handler for ESP8266 Core
+#define DEBUG_UPDATER Serial // For Updater.h process debugging
+#include <Updater.h>
 
 // It's better to use StaticJsonDocument for limited RAM devices
 // You can approx. the size by pasting the JSON to https://arduinojson.org/v6/assistant/
@@ -19,7 +25,7 @@
 #define JSON_FILE_NAME "/config.json"
 #define OTA_DEVICE_TYPE "ESP"
 
-
+const char * update_type = NULL;
 const char * device_id = NULL;
 const char * cluster_id = NULL;
 const char * ssid = NULL;
@@ -27,10 +33,10 @@ const char * passwd = "";
 
 #define TCP_GATEWAY_SOCKET_PORT 6666
 
-// Can probably make this a class
-unsigned int buffer_size = 0;
+// Can probably make this a class/struct
+unsigned int buffer_size = 0; 
 unsigned int cmd_mcast_port = 0;
-unsigned int cmd_mcast_addr[4];
+const char* cmd_mcast_addr;
 char cmd_msg_separator = '|'; // The default
 
 //States for UDP Multicast Listener
@@ -40,12 +46,21 @@ char cmd_msg_separator = '|'; // The default
 #define VERIFICATION_PHASE 3
 #define END_PHASE 4
 #define UPDATE_PHASE 5
+#define DONE_UPDATE 6
 
 int state = START_PHASE;
 
-UdpContext* udp_context;
-// WiFiUDP udp_socket;
+UdpContext* cmd_udp_context;
+UdpContext* data_udp_context;
 
+#define CMD_READY_FOR_TRANSFER "OK"
+#define CMD_INSUFFICIENT_SPACE "NO"
+#define CMD_PROCESS_ERROR "FA"
+
+#define CMD_TRANSFER_SUCCESS "ACK"
+#define CMD_CHECKSUM_MISMATCH "NEQ"
+
+// Reads config.json and set global variables accordingly
 bool init_runtime_params(){
   Serial.println("Reading config.json from SPIFFS...");
 
@@ -83,8 +98,13 @@ bool init_runtime_params(){
   }
 }
 
+// Scans for available WiFi Networks and their RSSI
+// Connects to open WiFi with highest RSSI, if any.
+// Will connect to "random_ssid" if none available
+// WIll be called when config.json doesn't specify SSID
+// Will loop indefinitely while not connected
 void scan_for_open_wifi(){
-  ssid = "default_value";
+  ssid = "random_ssid";
 
   // Connect to the one with highest RSSI
   int detected_ssid = WiFi.scanNetworks();
@@ -113,12 +133,14 @@ void scan_for_open_wifi(){
   }
 }
 
+// Handles initial WiFi Connection
+// Will attempt to connect to best open WiFi (based on RSSI)
+// to ensure application can still run even if not connected to gateway
 bool connect_to_wifi(){
   // Set to station mode and disconnect from last connected AP
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
-  // Check if SSID is defined in config.json
   if(!ssid){
     Serial.println("No SSID defined in config.json!");
     Serial.println("Scanning for open WiFi networks!");
@@ -145,7 +167,6 @@ bool connect_to_wifi(){
 
   Serial.print("IP Address : ");
   Serial.println(WiFi.localIP());
-  // Then connect to the one with the best RSSI
   
   return true;
 }
@@ -196,15 +217,7 @@ bool init_to_gateway(){
         cmd_mcast_port = json_reply["cmd_mcast_port"].as<int>();
 
         // Implicit casting here
-        char* addr_string = json_reply["cmd_mcast_addr"];
-
-        char* temp = strtok(addr_string, ".");
-        for(int octet = 0; octet < 4; octet++){
-          if(temp != NULL){
-            cmd_mcast_addr[octet] = int(temp);
-            temp = strtok(NULL, ".");
-          }
-        }
+        cmd_mcast_addr = json_reply["cmd_mcast_addr"];
       }
       
       gateway_init_success = true;
@@ -216,72 +229,280 @@ bool init_to_gateway(){
   return gateway_init_success;
 }
 
-bool set_mcast_listener(){
-  if(udp_context){
-    udp_context->unref();
-    udp_context = 0;
+// Creates Multicast Listeener and bind to UdpContext
+bool set_mcast_listener(UdpContext* target_udp_ctx, const char* target_mcast_addr, unsigned int target_mcast_port){
+  if (target_udp_ctx){
+    target_udp_ctx->unref();
+    target_udp_ctx = 0;
   }
+
+  int temp_arr[4]; 
+  int* local_ip_octets = parse_ipv4_addr(temp_arr, WiFi.localIP().toString().c_str());
+  ip4_addr_t* local_ip;
+  IP4_ADDR(local_ip, local_ip_octets[0], local_ip_octets[1], local_ip_octets[2], local_ip_octets[3]);
+
+
+  int another_arr[4];
+  int* mcast_ip_octets = parse_ipv4_addr(another_arr, target_mcast_addr);
+  ip4_addr_t* mcast_addr;
+  IP4_ADDR(mcast_addr, target_mcast_addr[0], mcast_ip_octets[1], mcast_ip_octets[2], mcast_ip_octets[3]);
 
   // Joins IGMP Group first
-  const char* local_ip_string = WiFi.localIP().toString().c_str();
-  char* holder;
-  int temp[4];
-
-  holder = strtok((char*)local_ip_string, ".");
-  for(int idx=0; idx < 4; idx++){
-    if(holder != NULL){
-      temp[idx] = int(holder);
-      holder = strtok(NULL, ".");
-    }
-  }
-
-  ip_addr* local_ip;
-  IP4_ADDR(local_ip, temp[0], temp[1], temp[2], temp[3]);
-
-  ip_addr* mcast_addr;
-  IP4_ADDR(mcast_addr, cmd_mcast_addr[0], cmd_mcast_addr[1], cmd_mcast_addr[2], cmd_mcast_addr[3]);
-  if (igmp_joingroup(local_ip, mcast_addr) != ERR_OK)
-  {
+  if (igmp_joingroup(local_ip, mcast_addr) != ERR_OK){
     return false;
   }
 
-  udp_context = new UdpContext;
-  udp_context->ref();
+  target_udp_ctx = new UdpContext;
+  target_udp_ctx->ref();
 
   // Set custom packet listener
-  udp_context->onRx(&on_mcast_cmd_packet);
-
-  // TODO: FIX THIS
-  if(!udp_context->listen(IPADDR4_INIT(INADDR_ANY), cmd_mcast_port)){
+  if (!target_udp_ctx->listen(IPADDR4_INIT(INADDR_ANY), target_mcast_port)){
     return false;
   }
 
-  state = STANDBY_PHASE;
   return true;
 }
 
-void on_mcast_cmd_packet(){
-  if (state == STANDBY_PHASE) {
-  } else if (state == TRANSFER_PHASE){
-  } else if (state == VERIFICATION_PHASE){
-  } else if (state == END_PHASE){
-  } else if (state == UPDATE_PHASE){
-  } 
+// Clean up function for data_udp_context
+// Called when successfully received all data
+// Or if received abort command
+void discard_data_context(){
+  // TODO: Cleanup using UdpContext's methods
+  // TODO: also, check about igmp memberships
+  if (data_udp_context)
+  {
+    data_udp_context->unref();
+    data_udp_context = 0;
+  }
+
+  buffer_size = 0;
 }
 
-void apply_update(){
-  // TODO: Base this on Updater Class used in ArduinoOTA
+// Parse %d.%d.%d.%d to int[4]
+int *parse_ipv4_addr(int *holder, const char *addr_string){
+  char *octet = strtok((char *)addr_string, ".");
+
+  for (int idx = 0; idx < 4; idx++)
+  {
+    if (octet != NULL)
+      continue;
+
+    holder[idx] = int(octet);
+    octet = strtok(NULL, ".");
+  }
+
+  return holder;
+}
+
+bool should_listen(const char* target_id){
+  bool for_me = true;
+  
+  if (update_type == "c"){
+    if (!cluster_id || cluster_id != target_id){
+      for_me = false;
+    }
+  }
+  else if (update_type == "d"){
+    if (target_id != device_id){
+      for_me = false;
+    }
+  }
+
+  return for_me;
+}
+
+// Calculate possible buffer size (based on Update.cpp internal implementation)
+size_t calculate_buffer(){
+  // Default value from Updater.cpp is 256
+  return (ESP.getFreeHeap() > 2 * FLASH_SECTOR_SIZE) ? FLASH_SECTOR_SIZE : 256;
+}
+
+// Based on ArduinoOTA's readStringUntil
+const char* parse_cmd(char delimiter){
+  String holder;
+  int val;
+
+  while(true){
+    val = cmd_udp_context->read();
+
+    if(val < 0 || val == '\0' || val == delimiter){
+      break;
+    } 
+
+    holder += static_cast<char>(val);
+  }
+
+  return holder.c_str();
+}
+
+// Constructs and sends reply message to Command Multicast Address
+void reply_cmd(const char* msg[], int arr_length, char delimiter){
+  String holder = "";
+  holder += msg[0];
+
+  for(int idx = 1; idx < arr_length; idx++){
+    holder += delimiter;
+    holder += msg[idx];
+  }
+
+  holder += '\n';
+
+  // TODO: Send using UdpContext methods
+
+  return;
+}
+
+// Receive UDP datagram from Data Multicast Address
+// to be bound to UdpContext onRx
+void on_recv_data(){
+  if(!data_udp_context->next() || buffer_size == 0){
+    return;
+  }
+
+  char* temp_buf;
+  size_t read_len = (buffer_size <= data_udp_context->getSize()) ? buffer_size : data_udp_context->getSize();
+  size_t read_size = data_udp_context->read(temp_buf, read_len);
+  // TODO: Lets hope the casting works
+  Update.write((uint8_t*)temp_buf, read_size);
+
+  while(data_udp_context->next()){
+    data_udp_context->flush();
+  }
+
+  if (Update.isFinished()){
+    discard_data_context();
+    state = VERIFICATION_PHASE;
+  }
+}
+
+// Receive UDP datagram from Command Multicast Address
+// to be bound to UdpContext onRx
+void on_cmd_mcast_packet(){
+  if(!cmd_udp_context->next()){
+    return;
+  }
+
+  const char* cmd_message = parse_cmd(cmd_msg_separator);
+  const char* target_id = parse_cmd(cmd_msg_separator);
+
+  if(!should_listen(target_id)){
+    return;
+  }
+
+  if(cmd_message == "a"){
+    const char* cmd_source = parse_cmd('\n');
+    Serial.print("Received Abort Command from Gateway ");
+    Serial.println(cmd_source);
+
+    Update.end();
+
+    discard_data_context();
+    state = STANDBY_PHASE;
+    return;
+  }
+  
+  if (state == STANDBY_PHASE) {
+    if(cmd_message != "c" && cmd_message != "d"){
+      return;
+    }
+
+    Serial.println("Command Received in Standby Phase!");
+    // If pass all the above checks
+    // cmd_message should contain update type [d = device, c = cluster]
+    update_type = cmd_message;
+
+    // Third part is the file size, to be parsed to int
+    size_t file_size = atoi(parse_cmd(cmd_msg_separator));
+
+    if(!Update.begin(file_size, U_FLASH)){
+      // Replies with 2 part message to notify gateway
+      Update.printError(Serial);
+
+      const char* err_code;
+      if(Update.getError() == UPDATE_ERROR_SPACE){
+        err_code = CMD_INSUFFICIENT_SPACE;
+      } else {
+        err_code = CMD_PROCESS_ERROR;
+      }
+      const char* error_msg[2] = {err_code, device_id};
+      reply_cmd(error_msg, 2, cmd_msg_separator);
+      return;
+    }
+
+    size_t possible_buffer = calculate_buffer();
+
+    // Fourth and fifth part are multicast address and port (respectively)
+    // to be used for data transfer later
+    const char* data_mcast_addr = parse_cmd(cmd_msg_separator);
+    const char* data_mcast_port = parse_cmd('\n');
+
+    // Create another multicast listener with UdpContext and set listener
+    set_mcast_listener(data_udp_context, data_mcast_addr, atoi(data_mcast_port));
+    data_udp_context->onRx(&on_recv_data);
+
+    char* buf_size;
+    itoa(possible_buffer, buf_size, 10);
+
+    // Replies with 3 part message if all is good
+    // The third part specifies buffer size that this device can handle
+    const char *success_reply_msg[3] = {CMD_READY_FOR_TRANSFER, device_id, buf_size};
+    reply_cmd(success_reply_msg, 3, cmd_msg_separator);
+
+    state = TRANSFER_PHASE;
+  } else if (state == TRANSFER_PHASE){
+    if(cmd_message != "t"){
+      return;
+    }
+
+    Serial.println("Command Received in Transfer Phase!");
+
+    // Use this buffer_size for receiving data
+    buffer_size = atoi(parse_cmd('\n'));
+
+    // Does not change state here to make sure
+    // This is to make sure that VERIFICATION_PHASE only starts after all data are received
+  } else if (state == VERIFICATION_PHASE){
+    if(cmd_message != "h"){
+      return;
+    }
+
+    Serial.println("Command Received in Verification Phase!");
+
+    // Server should have sent file's checksum
+    const char* server_checksum = parse_cmd('\n');
+
+    // Implements Update.end() partially
+    // Checks  received "file"'s checksum matches with server's checksum
+    bool checksum_mismatch = Update.md5String() != server_checksum;
+    const char *reply_code = (checksum_mismatch) ? CMD_CHECKSUM_MISMATCH : CMD_TRANSFER_SUCCESS;
+    const char* reply_msg[2] = {reply_code, device_id};
+    reply_cmd(reply_msg, 2, cmd_msg_separator);
+
+    state = END_PHASE;
+  } else if (state == END_PHASE){
+    if(cmd_message != "s"){
+      return;
+    }
+
+    Serial.println("Command Received in End Phase!");
+    state = UPDATE_PHASE;
+  }
+
+  while (cmd_udp_context->next()){
+    cmd_udp_context->flush();
+  }
 }
 
 void handle_ota_service(){
   if(state == UPDATE_PHASE){
-    apply_update();
-    state = STANDBY_PHASE;
+    Update.end();
   }
 }
 
 void setup() {
   Serial.begin(9600);
+  Serial.print("Initial Free Sketch Space : ");
+  Serial.println(ESP.getFreeSketchSpace());
 
   bool init_params_success = false;
 
@@ -310,7 +531,9 @@ void setup() {
 
   // If successfully initialized to gateway, setup Async Multicast Listener
   if(init_gateway_success){
-    set_mcast_listener();
+    set_mcast_listener(cmd_udp_context, cmd_mcast_addr, atoi(cmd_mcast_addr));
+    cmd_udp_context->onRx(&on_cmd_mcast_packet);
+    state = STANDBY_PHASE;
     Serial.println("Starting OTA Service Listener...");
   }
 }

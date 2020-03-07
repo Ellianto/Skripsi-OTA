@@ -103,7 +103,7 @@ def create_multicast_socket(target_address, bind_port):
 def listen_command_messages(mcast_sock, buf_size=1024, separator='|', timeout=None):
     mcast_sock.settimeout(timeout)
     msg, addr = mcast_sock.recvfrom(buf_size)
-    return [val.decode() for val in msg.split()], addr
+    return [val.strip() for val in msg.decode().split(separator)], addr
 
 
 def reply_command_messages(mcast_sock, message, address):
@@ -115,7 +115,8 @@ def check_free_space(file_size):
     return float(free_space * 0.95) > float(file_size)
 
 
-def receive_multicast_data(mcast_socket, file_size ,buf_size=1024):
+def receive_multicast_data(mcast_socket, file_size, buf_size=1024):
+    # TODO: If timedout while receiving data, send abort message
     with constants.paths.TEMP_DATA_FILE.open(mode='wb') as file:
         total = 0
 
@@ -145,6 +146,7 @@ def should_listen(target_id, device_info, is_cluster=False):
     return device_info['id' if is_cluster is False else 'cluster'] == target_id
 
 
+# TODO: Match these with changes in the Gateway side
 def handle_ota_update(gateway_params, device_info):
     #! **START PHASE**
     # Initial Run
@@ -158,6 +160,7 @@ def handle_ota_update(gateway_params, device_info):
             try:
                 #! **STANDBY PHASE**
                 #! Standby for gateway instructions 
+                # Expected message format : [c or d]|[target_id]|[file_size]|[data_mcast_addr]|[data_mcast_port]\n
                 cmd_messages, gateway_addr = listen_command_messages(global_multicast_socket,
                                                         buf_size=gateway_params['buffer_size'],
                                                         separator=gateway_params['message_separator'])
@@ -166,16 +169,28 @@ def handle_ota_update(gateway_params, device_info):
                 if cmd_messages[0] not in ['c', 'd']:
                     continue
 
-
-                if should_listen(cmd_messages[1], device_info, cmd_messages[1]=='c') is not True:
+                if should_listen(cmd_messages[1], device_info, cmd_messages[0]=='c') is not True:
                     continue
                 
                 file_size = int(cmd_messages[2])
                 enough_free_space = check_free_space(file_size)
-                msg_array = [
-                    constants.cmd_code.OK if enough_free_space is True else constants.cmd_code.INSUFFICIENT_DISK, device_info['id']]
+
+                msg_array = []
+
+                if enough_free_space is True:
+                    msg_array = [
+                        constants.cmd_code.OK,
+                        device_info['id'],
+                        gateway_params['buffer_size']
+                    ]
+                else:
+                    msg_array = [
+                        constants.cmd_code.INSUFFICIENT_DISK,
+                        device_info['id']
+                    ]
                     
                 #! Reply about my free size (enough or not enough)
+                # Reply 
                 reply_message = gateway_params['message_separator'].join(msg_array)
                 reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
 
@@ -184,19 +199,22 @@ def handle_ota_update(gateway_params, device_info):
                     print('It is advised to leave at least 5% of free disk space')
                     continue
 
-                [data_multicast_addr, data_multicast_port] = cmd_messages[3].split(':')
-                data_multicast_socket = create_multicast_socket(data_multicast_addr, data_multicast_port)
+                data_multicast_addr = cmd_messages[3]
+                data_multicast_port = cmd_messages[4]
+                data_multicast_socket = create_multicast_socket(
+                    data_multicast_addr, data_multicast_port)
 
                 listen_transfer = True
 
                 #! **TRANSFER PHASE**
                 #! Poll until transfer/abort command
+                # Expected message format : [t or a]|[target_id]|[buffer_size]\n
                 while True:
                     transfer_messages, gateway_addr = listen_command_messages(global_multicast_socket,
                                                                             buf_size=gateway_params['buffer_size'],
                                                                             separator=gateway_params['message_separator'])
 
-                    if should_listen(transfer_messages[1], device_info, cmd_messages[1] == 'c') is not True:
+                    if should_listen(transfer_messages[1], device_info, cmd_messages[0] == 'c') is not True:
                         continue
 
                     listen_transfer = transfer_messages[0] != 'a'
@@ -209,18 +227,19 @@ def handle_ota_update(gateway_params, device_info):
                     continue
 
                 #! Receive Files (if not abort)
-                file_received_len = receive_multicast_data(data_multicast_socket, file_size, gateway_params['buffer_size'])
+                file_received_len = receive_multicast_data(data_multicast_socket, file_size, int(transfer_messages[2]))
                 do_checksum = True
 
                 #! **VERIFICATION PHASE**
                 #! Poll until checksum/abort command
+                # Expected message format : [h or a]|[target_id]|[file_checksum]\n
                 while True:
                     checksum_messages, gateway_addr = listen_command_messages(global_multicast_socket,
                                                                             buf_size=gateway_params['buffer_size'],
                                                                             separator=gateway_params['message_separator'], 
                                                                             timeout=3.0)
 
-                    if should_listen(checksum_messages[1], device_info, cmd_messages[1] == 'c') is not True:
+                    if should_listen(checksum_messages[1], device_info, cmd_messages[0] == 'c') is not True:
                         continue
 
                     do_checksum = checksum_messages[0] != 'a'                    
@@ -232,11 +251,12 @@ def handle_ota_update(gateway_params, device_info):
                     print('Aborting After Transfer Phase...')
 
                 #! Match Checksum and reply (if not abort)
-                server_checksum = checksum_messages[1]
-                if server_checksum == md5Checksum(gateway_params['buffer_size']):
-                    ack_reply = [constants.cmd_code.ACK, device_info['device_id']]
+                server_checksum = checksum_messages[2]
+                if server_checksum != md5Checksum(gateway_params['buffer_size']):
+                    ack_reply = [constants.cmd_code.CHECKSUM_MISMATCH,
+                                 device_info['device_id']]
                 else:
-                    ack_reply = [constants.cmd_code.HASHSUM_MISMATCH, device_info['device_id']]
+                    ack_reply = [constants.cmd_code.ACK, device_info['device_id']]
 
                 reply_message = gateway_params['message_separator'].join(ack_reply)
                 reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
@@ -245,16 +265,17 @@ def handle_ota_update(gateway_params, device_info):
 
                 #! **END PHASE**
                 #! Poll until startUpdate/abort command
+                # Expected message format : [s or a]|[target_id]\n
                 while True:
                     start_messages, gateway_addr = listen_command_messages(global_multicast_socket,
                                                                             buf_size=gateway_params['buffer_size'],
                                                                             separator=gateway_params['message_separator'],
                                                                             timeout=5.0)
 
-                    if should_listen(start_messages[1], device_info, cmd_messages[1] == 'c') is not True:
+                    if should_listen(start_messages[1], device_info, cmd_messages[0] == 'c') is not True:
                         continue
 
-                    start_update = start_messages[0] == 'a'
+                    start_update = start_messages[0] != 'a'
 
                     if start_messages[0] in ['s', 'a']:
                         break
