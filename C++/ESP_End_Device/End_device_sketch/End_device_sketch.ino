@@ -5,7 +5,6 @@
 #include <ArduinoJson.h>
 #include "FS.h"
 
-
 // For UDP Multicast Listener Setup
 #include "lwip/ip_addr.h"
 #include "lwip/ip4_addr.h"
@@ -37,6 +36,7 @@ const char * passwd = "";
 unsigned int buffer_size = 0; 
 unsigned int cmd_mcast_port = 0;
 const char* cmd_mcast_addr;
+const char* data_mcast_addr;
 char cmd_msg_separator = '|'; // The default
 
 //States for UDP Multicast Listener
@@ -241,15 +241,20 @@ bool set_mcast_listener(UdpContext* target_udp_ctx, const char* target_mcast_add
   ip4_addr_t* local_ip;
   IP4_ADDR(local_ip, local_ip_octets[0], local_ip_octets[1], local_ip_octets[2], local_ip_octets[3]);
 
-
   int another_arr[4];
   int* mcast_ip_octets = parse_ipv4_addr(another_arr, target_mcast_addr);
   ip4_addr_t* mcast_addr;
-  IP4_ADDR(mcast_addr, target_mcast_addr[0], mcast_ip_octets[1], mcast_ip_octets[2], mcast_ip_octets[3]);
+  IP4_ADDR(mcast_addr, mcast_ip_octets[0], mcast_ip_octets[1], mcast_ip_octets[2], mcast_ip_octets[3]);
 
   // Joins IGMP Group first
-  if (igmp_joingroup(local_ip, mcast_addr) != ERR_OK){
-    return false;
+  for(int attempts = 0; attempts < 3; attempts++){
+    int err_code = igmp_joingroup(local_ip, mcast_addr);
+
+    if (err_code != ERR_OK){
+      Serial.print("IGMP Join Group Error Code : ");
+      Serial.println(err_code);
+      return false;
+    }
   }
 
   target_udp_ctx = new UdpContext;
@@ -267,10 +272,28 @@ bool set_mcast_listener(UdpContext* target_udp_ctx, const char* target_mcast_add
 // Called when successfully received all data
 // Or if received abort command
 void discard_data_context(){
-  // TODO: Cleanup using UdpContext's methods
-  // TODO: also, check about igmp memberships
-  if (data_udp_context)
-  {
+  // Leave the IGMP group
+  int temp_arr[4];
+  int *local_ip_octets = parse_ipv4_addr(temp_arr, WiFi.localIP().toString().c_str());
+  ip4_addr_t *local_ip;
+  IP4_ADDR(local_ip, local_ip_octets[0], local_ip_octets[1], local_ip_octets[2], local_ip_octets[3]);
+
+  int another_arr[4];
+  int *mcast_ip_octets = parse_ipv4_addr(another_arr, data_mcast_addr);
+  ip4_addr_t *mcast_addr;
+  IP4_ADDR(mcast_addr, mcast_ip_octets[0], mcast_ip_octets[1], mcast_ip_octets[2], mcast_ip_octets[3]);
+
+  for(int attempts = 0; attempts < 3; attempts++){
+    int err_code = igmp_leavegroup(local_ip, mcast_addr);
+
+    if (err_code != ERR_OK){
+      Serial.print("IGMP Leave Group Error Code : ");
+      Serial.println(err_code);
+    }
+  }
+
+  // Cleanup using UdpContext's methods
+  if (data_udp_context){
     data_udp_context->unref();
     data_udp_context = 0;
   }
@@ -347,7 +370,11 @@ void reply_cmd(const char* msg[], int arr_length, char delimiter){
 
   holder += '\n';
 
-  // TODO: Send using UdpContext methods
+  cmd_udp_context->append(holder.c_str(), holder.length());
+
+  ip_addr_t *remote_ip = (ip_addr_t *)cmd_udp_context->getRemoteAddress();
+  uint16_t remote_port = cmd_udp_context->getRemotePort();
+  cmd_udp_context->send(remote_ip, remote_port);
 
   return;
 }
@@ -433,7 +460,7 @@ void on_cmd_mcast_packet(){
 
     // Fourth and fifth part are multicast address and port (respectively)
     // to be used for data transfer later
-    const char* data_mcast_addr = parse_cmd(cmd_msg_separator);
+    data_mcast_addr = parse_cmd(cmd_msg_separator);
     const char* data_mcast_port = parse_cmd('\n');
 
     // Create another multicast listener with UdpContext and set listener
