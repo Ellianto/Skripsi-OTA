@@ -14,6 +14,20 @@ This TODO will explain the steps required to setup the Raspberry Pi as Gateway/C
     >$ sudo su
     >$ apt-get install python3.7 python3-pip python3-venv 
 
+* To login as root at boot, edit this line at /lib/systemd/system/getty@.service
+
+    Change:
+        ExecStart=-/sbin/getty/ --noclear %I $TERM 
+
+    Into:
+        ExecStart=-/sbin/getty/ --noclear -a root %I $TERM
+
+* Probably need to remove root password :
+
+    >$ sudo nano /etc/passwd
+
+    Make sure that there are no 'x' at the line that specifies the root account
+
 1. run "sudo raspi-config"
 2. Update the raspi-config tool
 3. Change "pi" user password to "teknik_komputer"
@@ -95,6 +109,13 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
     >$ systemctl status systemd-networkd.service 
     >$ systemctl enable systemd-resolved.service
     >$ ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+    *Also, it would seem like we need to run systemctl daemon-reload everytime resolved is startec
+    *Simply, we can run the command on every boot by adding the command to /etc/rc.local
+
+    >$ sudo nano /etc/rc.local
+    
+    Append "sudo systemctl daemon-reload" before the exit 0 command
 
 12. Setup hostapd for Access Point (replace the parameters in square brackets with the appropriate value)
     note: check the channel used in wlan0 or whatever wireless interface is currently connected to internet

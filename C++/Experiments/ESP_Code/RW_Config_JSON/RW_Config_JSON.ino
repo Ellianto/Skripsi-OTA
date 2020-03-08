@@ -20,19 +20,17 @@
 #define DEVICE_TYPE "ESP"
 
 //Save the config.json to SPIFFS for persistent storage
-bool saveConfig()
-{
-  StaticJsonDocument<STATIC_JSON_SIZE> doc;
+bool saveConfig(){
+  StaticJsonDocument<STATIC_JSON_SIZE> device;
 
-  // Format based on config.json in EndDevicePython
-  // TODO: Change this if the config.json is changed
-  doc["gateway"] = "ota_gateway";
-  doc["init_api"] = "/init/device";
-
-  JsonObject device = doc.createNestedObject("device");
+  //Modify the JSON keys and values here
   device["id"] = "target_device_x01";
   device["type"] = DEVICE_TYPE;
-  device["cluster"] = NULL;
+  device["cluster"] = nullptr;
+  device["ssid"] = "PI_GW_01";
+  device["passwd"] = "teknik_komputer";
+  // device["ssid"] = "ELLI";
+  // device["passwd"] = "gading8899";
 
   File configFile = SPIFFS.open(JSON_FILE_NAME, "w");
   if (!configFile)
@@ -41,7 +39,7 @@ bool saveConfig()
     return false;
   }
 
-  serializeJson(doc, configFile);
+  serializeJson(device, configFile);
   return true;
 }
 
@@ -61,6 +59,8 @@ bool loadConfig() {
   } else {
     // Print to Serial to inform developer of read result
     serializeJsonPretty(doc, Serial);
+    Serial.println("");
+    Serial.println("");
   }
 
   return true;

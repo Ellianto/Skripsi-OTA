@@ -24,19 +24,19 @@
 #define JSON_FILE_NAME "/config.json"
 #define OTA_DEVICE_TYPE "ESP"
 
-const char * update_type = NULL;
-const char * device_id = NULL;
-const char * cluster_id = NULL;
-const char * ssid = NULL;
-const char * passwd = "";
+char update_type;
+String device_id;
+String cluster_id;
+String ssid;
+String passwd;
 
 #define TCP_GATEWAY_SOCKET_PORT 6666
 
 // Can probably make this a class/struct
 unsigned int buffer_size = 0; 
 unsigned int cmd_mcast_port = 0;
-const char* cmd_mcast_addr;
-const char* data_mcast_addr;
+String cmd_mcast_addr;
+String data_mcast_addr;
 char cmd_msg_separator = '|'; // The default
 
 //States for UDP Multicast Listener
@@ -62,6 +62,11 @@ UdpContext* data_udp_context;
 
 // Reads config.json and set global variables accordingly
 bool init_runtime_params(){
+  // Initial call to SPIFFS before reading config
+  if(!SPIFFS.begin()){
+    Serial.println("Failed to mount SPIFFS!");
+  }
+  
   Serial.println("Reading config.json from SPIFFS...");
 
   File config_file = SPIFFS.open(JSON_FILE_NAME, "r");
@@ -73,25 +78,30 @@ bool init_runtime_params(){
 
   StaticJsonDocument<STATIC_JSON_SIZE> json_doc;
   auto error = deserializeJson(json_doc, config_file);
+  
+  // Unmount SPIFFS since we're done with the files
+  SPIFFS.end();
 
   if(error){
     Serial.println("Failed to parse config.json!");
     return false;
   } else {
+    serializeJsonPretty(json_doc, Serial);
     // Change global runtime variables here
-    device_id = json_doc["id"];
-    cluster_id = json_doc["cluster"];
+    device_id = String(json_doc["id"].as<const char*>());
+    cluster_id = String(json_doc["cluster"].as<const char *>());
 
     if(!device_id){ // Device ID is null
       return false;
     }
 
     if(json_doc.containsKey("ssid")){
-      ssid = json_doc["ssid"];
+      Serial.println("Using SSID from config.json...");
+      ssid = String(json_doc["ssid"].as<const char*>());
     }
 
     if(json_doc.containsKey("passwd")){
-      passwd = json_doc["passwd"];
+      passwd = String(json_doc["passwd"].as<const char*>());
     }
     
     return true;
@@ -102,10 +112,7 @@ bool init_runtime_params(){
 // Connects to open WiFi with highest RSSI, if any.
 // Will connect to "random_ssid" if none available
 // WIll be called when config.json doesn't specify SSID
-// Will loop indefinitely while not connected
 void scan_for_open_wifi(){
-  ssid = "random_ssid";
-
   // Connect to the one with highest RSSI
   int detected_ssid = WiFi.scanNetworks();
 
@@ -128,7 +135,9 @@ void scan_for_open_wifi(){
     }
 
     if (chosen_ssid_idx != detected_ssid){
-      ssid = WiFi.SSID(chosen_ssid_idx).c_str();
+      ssid = WiFi.SSID(chosen_ssid_idx);
+    } else {
+      ssid = "random_ssid";
     }
   }
 }
@@ -145,19 +154,19 @@ bool connect_to_wifi(){
     Serial.println("No SSID defined in config.json!");
     Serial.println("Scanning for open WiFi networks!");
 
-    // TODO: Can fallback to SoftAP mode for advanced configurations later
     // Scan for any available open SSID using WiFiScan
     // and connect to the one with the highest RSSI
     scan_for_open_wifi();
   }
 
-  Serial.print("Connecting to ");
   Serial.println(ssid);
+  Serial.println(passwd);
   WiFi.begin(ssid, passwd);
 
+  // Will loop indefinitely while not connected
   while(WiFi.status() != WL_CONNECTED){
-    delay(300);
-    Serial.print(".");
+    delay(500);
+    Serial.print(WiFi.status());
   }
 
   Serial.println("");
@@ -195,11 +204,11 @@ bool init_to_gateway(){
     tcp_client.println(temp_buf);
 
     // Wait for Gateway's reply
-    const char *gateway_reply = "";
+    char *gateway_reply = "";
 
     while (tcp_client.connected() || tcp_client.available()){
       if(tcp_client.available()){
-        gateway_reply = tcp_client.readStringUntil('\n').c_str();
+        strcat(gateway_reply, tcp_client.readStringUntil('\n').c_str());
       }
     }
 
@@ -217,7 +226,7 @@ bool init_to_gateway(){
         cmd_mcast_port = json_reply["cmd_mcast_port"].as<int>();
 
         // Implicit casting here
-        cmd_mcast_addr = json_reply["cmd_mcast_addr"];
+        cmd_mcast_addr = String(json_reply["cmd_mcast_addr"].as<const char*>());
       }
       
       gateway_init_success = true;
@@ -230,14 +239,14 @@ bool init_to_gateway(){
 }
 
 // Creates Multicast Listeener and bind to UdpContext
-bool set_mcast_listener(UdpContext* target_udp_ctx, const char* target_mcast_addr, unsigned int target_mcast_port){
+bool set_mcast_listener(UdpContext* target_udp_ctx, String target_mcast_addr, unsigned int target_mcast_port){
   if (target_udp_ctx){
     target_udp_ctx->unref();
     target_udp_ctx = 0;
   }
 
   int temp_arr[4]; 
-  int* local_ip_octets = parse_ipv4_addr(temp_arr, WiFi.localIP().toString().c_str());
+  int* local_ip_octets = parse_ipv4_addr(temp_arr, WiFi.localIP().toString());
   ip4_addr_t* local_ip;
   IP4_ADDR(local_ip, local_ip_octets[0], local_ip_octets[1], local_ip_octets[2], local_ip_octets[3]);
 
@@ -274,7 +283,7 @@ bool set_mcast_listener(UdpContext* target_udp_ctx, const char* target_mcast_add
 void discard_data_context(){
   // Leave the IGMP group
   int temp_arr[4];
-  int *local_ip_octets = parse_ipv4_addr(temp_arr, WiFi.localIP().toString().c_str());
+  int *local_ip_octets = parse_ipv4_addr(temp_arr, WiFi.localIP().toString());
   ip4_addr_t *local_ip;
   IP4_ADDR(local_ip, local_ip_octets[0], local_ip_octets[1], local_ip_octets[2], local_ip_octets[3]);
 
@@ -302,11 +311,10 @@ void discard_data_context(){
 }
 
 // Parse %d.%d.%d.%d to int[4]
-int *parse_ipv4_addr(int *holder, const char *addr_string){
-  char *octet = strtok((char *)addr_string, ".");
+int *parse_ipv4_addr(int *holder, String addr_string){
+  char *octet = strtok((char *)addr_string.c_str(), ".");
 
-  for (int idx = 0; idx < 4; idx++)
-  {
+  for (int idx = 0; idx < 4; idx++){
     if (octet != NULL)
       continue;
 
@@ -317,15 +325,16 @@ int *parse_ipv4_addr(int *holder, const char *addr_string){
   return holder;
 }
 
-bool should_listen(const char* target_id){
+bool should_listen(const char* received_id){
   bool for_me = true;
+  String target_id = String(received_id);
   
-  if (update_type == "c"){
+  if (update_type == 'c'){
     if (!cluster_id || cluster_id != target_id){
       for_me = false;
     }
   }
-  else if (update_type == "d"){
+  else if (update_type == 'd'){
     if (target_id != device_id){
       for_me = false;
     }
@@ -372,9 +381,9 @@ void reply_cmd(const char* msg[], int arr_length, char delimiter){
 
   cmd_udp_context->append(holder.c_str(), holder.length());
 
-  ip_addr_t *remote_ip = (ip_addr_t *)cmd_udp_context->getRemoteAddress();
+//  ip_addr_t *remote_ip = (ip_addr_t *)cmd_udp_context->getRemoteAddress();
   uint16_t remote_port = cmd_udp_context->getRemotePort();
-  cmd_udp_context->send(remote_ip, remote_port);
+  cmd_udp_context->send(cmd_udp_context->getRemoteAddress(), remote_port);
 
   return;
 }
@@ -436,7 +445,7 @@ void on_cmd_mcast_packet(){
     Serial.println("Command Received in Standby Phase!");
     // If pass all the above checks
     // cmd_message should contain update type [d = device, c = cluster]
-    update_type = cmd_message;
+    update_type = cmd_message[0];
 
     // Third part is the file size, to be parsed to int
     size_t file_size = atoi(parse_cmd(cmd_msg_separator));
@@ -451,7 +460,7 @@ void on_cmd_mcast_packet(){
       } else {
         err_code = CMD_PROCESS_ERROR;
       }
-      const char* error_msg[2] = {err_code, device_id};
+      const char* error_msg[2] = {err_code, device_id.c_str()};
       reply_cmd(error_msg, 2, cmd_msg_separator);
       return;
     }
@@ -460,7 +469,7 @@ void on_cmd_mcast_packet(){
 
     // Fourth and fifth part are multicast address and port (respectively)
     // to be used for data transfer later
-    data_mcast_addr = parse_cmd(cmd_msg_separator);
+    data_mcast_addr = String(parse_cmd(cmd_msg_separator));
     const char* data_mcast_port = parse_cmd('\n');
 
     // Create another multicast listener with UdpContext and set listener
@@ -472,7 +481,7 @@ void on_cmd_mcast_packet(){
 
     // Replies with 3 part message if all is good
     // The third part specifies buffer size that this device can handle
-    const char *success_reply_msg[3] = {CMD_READY_FOR_TRANSFER, device_id, buf_size};
+    const char *success_reply_msg[3] = {CMD_READY_FOR_TRANSFER, device_id.c_str(), buf_size};
     reply_cmd(success_reply_msg, 3, cmd_msg_separator);
 
     state = TRANSFER_PHASE;
@@ -502,7 +511,7 @@ void on_cmd_mcast_packet(){
     // Checks  received "file"'s checksum matches with server's checksum
     bool checksum_mismatch = Update.md5String() != server_checksum;
     const char *reply_code = (checksum_mismatch) ? CMD_CHECKSUM_MISMATCH : CMD_TRANSFER_SUCCESS;
-    const char* reply_msg[2] = {reply_code, device_id};
+    const char *reply_msg[2] = {reply_code, device_id.c_str()};
     reply_cmd(reply_msg, 2, cmd_msg_separator);
 
     state = END_PHASE;
@@ -527,16 +536,11 @@ void handle_ota_service(){
 }
 
 void setup() {
-  Serial.begin(9600);
-  Serial.print("Initial Free Sketch Space : ");
-  Serial.println(ESP.getFreeSketchSpace());
+  Serial.begin(115200);
 
-  bool init_params_success = false;
-
-  if (SPIFFS.exists(JSON_FILE_NAME)){
-    // Read config.json to initialize global variables
-    init_params_success = init_runtime_params();
-  } else {
+  // Read config.json to initialize global variables
+  bool init_params_success = init_runtime_params();
+  if (!init_params_success){
     Serial.println("config.json File does not exists in SPIFFS!");
   }
   
@@ -547,18 +551,16 @@ void setup() {
   bool gateway_wifi_connected = connect_to_wifi();
 
 
-  bool init_gateway_success = false;
+  bool init_gateway_success = init_to_gateway();
   // If successfully connected to WiFi (and Device ID Defined)
   // try to initialize to TCP Socket Server
-  if(init_params_success && gateway_wifi_connected){
-    init_gateway_success = init_to_gateway();
-  } else {
+  if(!init_params_success || !gateway_wifi_connected){
     Serial.println("OTA Service Unavailable!");
   }
 
   // If successfully initialized to gateway, setup Async Multicast Listener
   if(init_gateway_success){
-    set_mcast_listener(cmd_udp_context, cmd_mcast_addr, atoi(cmd_mcast_addr));
+    set_mcast_listener(cmd_udp_context, cmd_mcast_addr, cmd_mcast_port);
     cmd_udp_context->onRx(&on_cmd_mcast_packet);
     state = STANDBY_PHASE;
     Serial.println("Starting OTA Service Listener...");
@@ -568,5 +570,4 @@ void setup() {
 void loop() {
   handle_ota_service();
   // put your main code here, to run repeatedly:
-
 }

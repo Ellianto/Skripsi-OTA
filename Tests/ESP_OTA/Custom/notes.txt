@@ -1,0 +1,12 @@
+Make sure to write "config.json" with the following format (also defined in Experiments\ESP_Code\RW_Config_JSON)
+
+{
+    "id" : str(8,30),
+    "cluster" : null | str(8,30),
+    "type" : (will be defined by the RW_Config_JSON) "ESP" | "RPi",
+    "ssid" : (optional)str,
+    "passwd" : (optional)str,
+}
+
+Initial Sketch (Just the handlers, without any application code):
+Size : 307856 bytes (End_device_sketch.ino.bin)
