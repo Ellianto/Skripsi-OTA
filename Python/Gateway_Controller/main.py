@@ -419,7 +419,7 @@ def multicast_update(target_id, is_cluster=False):
 
     #! Poll for client response
     # Expected message format : [OK or NO or FA]|[device_id]|[possible_buffer_size]\n
-    max_buffer_size = 0
+    buffer_limit = 1460
     while True:
         try:
             reply_messages = listen_for_reply(cmd_mcast_socket, buf_size=configuration['buffer_size'])
@@ -429,11 +429,10 @@ def multicast_update(target_id, is_cluster=False):
 
                 client_buffer_size = reply_messages[2]
 
-                more_buffer = max_buffer_size < client_buffer_size
-                mtu_acceptable = constants.network.MTU_SIZE >= client_buffer_size
+                over_limit = buffer_limit > client_buffer_size
 
-                if (more_buffer and mtu_acceptable):
-                    max_buffer_size = client_buffer_size
+                if over_limit is True:
+                    buffer_limit = client_buffer_size
             elif clients_replied[0] in ['NO', 'FA']:
                 break
         except sock.timeout:
@@ -468,7 +467,7 @@ def multicast_update(target_id, is_cluster=False):
     begin_transfer_msg = [
         't',
         str(target_id),
-        max_buffer_size
+        buffer_limit
     ]
 
     time.sleep(0.5)
