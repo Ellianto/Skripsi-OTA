@@ -20,7 +20,6 @@ mqtt_client = None
 cmd_mcast_socket = None
 data_mcast_socket = None
 
-
 def init_device_to_server(json_data):
     status = False
 
@@ -44,7 +43,7 @@ def init_device_to_server(json_data):
 
     return status
 
-# TODO: Do something with mismatching type later
+
 def init_device_to_file(json_data):
     # Add to devices.json
     devices_list = get_devices()
@@ -95,7 +94,8 @@ class MyTCPHandler(socketserver.StreamRequestHandler):
     def handle(self):
         configuration = get_config()
         # Note that the serialized JSON needs to be newline terminated
-        received_json = json.loads(self.rfile.readline().strip())
+        client_response = self.rfile.readline().decode().strip()
+        received_json = json.loads(client_response)
         self.data = constants.json_schema.END_DEVICE_CONF_VALIDATOR(
             received_json)
 
@@ -104,9 +104,9 @@ class MyTCPHandler(socketserver.StreamRequestHandler):
 
         if self.data['code'] in ['INIT']:
             device_data = {
-                'id' : self.data['id'],
-                'cluster' : self.data['cluster'],
-                'type' : self.data['type'] 
+                'id' : str(self.data['id']),
+                'cluster' : None if str(self.data['cluster']) == '' else str(self.data['cluster']),
+                'type' : str(self.data['type']) 
             }
 
             # Forward to Server
@@ -129,11 +129,12 @@ class MyTCPHandler(socketserver.StreamRequestHandler):
                     'cmd_mcast_addr': cmd_mcast_addr,
                     'cmd_mcast_port': cmd_mcast_port
                 }
+
             else:
                 self.reply_json = {'status' : 'failed'}
 
-        # The reply is also newline terminated
-        self.wfile.write((json.dumps(self.reply_json) + '\n').encode())
+        encoded_json = (json.dumps(self.reply_json)).encode()
+        self.wfile.write(encoded_json)
 
 
 # Initializer Functions
@@ -298,7 +299,7 @@ def init_mqtt():
         mqtt_client.on_connect = on_mqtt_connect
         mqtt_client.on_message = on_mqtt_message
 
-        mqtt_client.connect(configuration['mqtt_broker'])
+        mqtt_client.connect(configuration['mqtt_broker'], bind_address=constants.network.WLAN_ADDRESS)
         mqtt_client.loop_start()
         rc = True
     except Exception as err:
@@ -545,7 +546,7 @@ def multicast_update(target_id, is_cluster=False):
 def on_mqtt_connect(client, userdata, flags, rc):
     if rc == 0:
         configuration = get_config()
-        (result, mid) = mqtt_client.subscribe(
+        (result, mid) = client.subscribe(
                 configuration['mqtt_topic'], qos=2)
 
         if result == mqtt.MQTT_ERR_SUCCESS:
@@ -554,7 +555,7 @@ def on_mqtt_connect(client, userdata, flags, rc):
                 configuration['gateway_uid']
             ]
 
-            mqtt_client.publish(configuration['mqtt_topic'], constants.network.CMD_MSG_SEPARATOR.join(active_msg).encode())
+            client.publish(configuration['mqtt_topic'], constants.network.CMD_MSG_SEPARATOR.join(active_msg).encode(), qos=2)
     
     if rc in range(len(constants.mqtt.RETURN_CODE_MESSAGES)):
         print(constants.mqtt.RETURN_CODE_MESSAGES[rc])
@@ -570,7 +571,7 @@ def on_mqtt_message(client, userdata, msg):
 
     if mqtt_message[0] == constants.mqtt.UPDATE_CODE:
         target_id = str(mqtt_message[2])
-        # TODO: Inspect Return code (if fail, probably report to an endpoint) later
+
         attempts = 0
         messages = ['Success!', 'Some target clients failed to connect!', 'Data Transfer not successful!']
 

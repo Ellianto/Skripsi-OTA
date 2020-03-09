@@ -11,3 +11,12 @@
 2020/03/04 15:37:15.087679: Loaded 512 bit RSA key with fingerprint 71:E4:7A:23:D5:43:8E:84:1B:5F:4D:64:0C:77:04:CC:CB:E5:F8:B7
 2020/03/04 17:42:38.342486: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
 2020/03/04 17:42:38.347960: Loaded 512 bit RSA key with fingerprint 01:57:CA:4E:18:23:9D:64:F1:D1:A8:C8:47:8A:13:92:F7:07:17:39
+2020/03/08 10:37:29.352027: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/08 10:37:29.352968: Loaded 512 bit RSA key with fingerprint D9:3A:0B:C3:34:AC:11:14:FC:40:8D:C0:37:83:54:88:EF:D9:67:15
+2020/03/09 07:31:42.766857: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/09 07:31:42.768883: Loaded 512 bit RSA key with fingerprint C9:9E:49:87:77:0A:6C:AF:3F:BD:6D:95:FD:5C:CD:78:BD:36:A7:A5
+2020/03/09 08:00:29.983950: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/09 08:00:29.989472: Loaded 512 bit RSA key with fingerprint 66:8F:8E:35:89:4F:A0:14:D5:C6:AF:5E:36:47:01:B0:84:FD:62:9F
+2020/03/09 11:53:46.947359: Exiting on signal 15
+2020/03/09 11:55:48.303773: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/09 11:55:48.309270: Loaded 512 bit RSA key with fingerprint 00:BC:5B:1E:0B:94:DB:50:97:6E:AC:58:95:CB:97:4D:98:D8:10:3E
