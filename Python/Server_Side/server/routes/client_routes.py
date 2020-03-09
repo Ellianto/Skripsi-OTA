@@ -49,7 +49,7 @@ def add_new_device():
             file_io.write_devices(devices)
 
             status_response['status'] = constants.strings.STATUS_CODE_SUCCESS
-            status_response['message'] = 'New cluster successfully created!'
+            status_response['message'] = 'New device successfully created!'
     except OSError:
         status_response['status'] = constants.strings.STATUS_CODE_ERROR
         status_response['message'] = 'Server Side Error Occurred!'

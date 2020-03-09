@@ -1,5 +1,5 @@
 # Endpoints
-BASE_URL = 'http://localhost:5000/'
+BASE_URL = 'http://localhost:9999/'
 
 LIST_DEVICES = BASE_URL + 'list/devices/'
 LIST_CLUSTERS = BASE_URL + 'list/clusters/'

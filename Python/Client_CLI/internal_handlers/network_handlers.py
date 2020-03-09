@@ -1,6 +1,6 @@
 import requests
 
-from voluptuous import Required, Coerce, MultipleInvalid, Schema
+from voluptuous import Required, Coerce, MultipleInvalid, Schema, ALLOW_EXTRA
 
 from internal_handlers.error_handlers import handle_request_exceptions
 from internal_handlers.helpers import getch
@@ -29,7 +29,7 @@ def send_to_server(target_endpoint, data, method='POST'):
     status_validator = Schema({
         Required('status') : Coerce(str),
         Required('message') : Coerce(str),
-    }, extra=voluptuous.ALLOW_EXTRA)
+    }, extra=ALLOW_EXTRA)
 
     try:
         if method == 'POST':

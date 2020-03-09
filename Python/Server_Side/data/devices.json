@@ -1,3 +1,10 @@
 {
-    "data": []
+    "data": [
+        {
+            "cluster": null,
+            "gateway": null,
+            "id": "target_device_x01",
+            "type": null
+        }
+    ]
 }

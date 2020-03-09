@@ -10,5 +10,17 @@ MQTT_TLS_ENABLED = False
 
 UPDATE_CODE = 'update'
 DEVICE_CODE = 'device'
+INIT_CODE   = 'init'
 
 CMD_SEPARATOR = '|'
+
+MQTT_MESSAGES = [
+    'Successfully connected to MQTT Broker!'
+    'Incorrect Protocol Version!',
+    'Invalid Client ID!',
+    'MQTT Server/Broker is unavailable!',
+    'Bad Username/Password!',
+    'Authorization Failed!'
+]
+
+UNHANDLED_MQTT_ERRORS = 'Invalid Return Code!'

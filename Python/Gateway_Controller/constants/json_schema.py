@@ -13,6 +13,7 @@ SERVER_CONF_VALIDATOR = Schema({
 })
 
 END_DEVICE_CONF_VALIDATOR = Schema({
+    Required('code'): Coerce(str),
     Required('id'): All(Coerce(str, msg='Invalid variable type, expected str'), Length(
         min=8, max=30, msg='Invalid Length, expected 8-30 char'), Match(r'^[A-Za-z_][A-Za-z0-9_]{7,29}$')),
     Required('cluster'): Any(Maybe(str), All(Coerce(str, msg='Invalid variable type, expected str'), Length(

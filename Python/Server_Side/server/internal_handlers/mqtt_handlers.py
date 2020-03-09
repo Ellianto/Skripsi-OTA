@@ -21,23 +21,20 @@ def handle_message(client, userdata, msg):
 
     mqtt_message = msg.payload.decode().split(constants.mqtt.CMD_SEPARATOR)
 
-    if mqtt_message[0] == 'init' and msg.topic == constants.mqtt.GLOBAL_TOPIC:
+    if mqtt_message[0] == constants.mqtt.INIT_CODE:
         # Check if UID already exists
         gateways = file_io.read_gateways()
 
         gateway_exists = next((
-            gateway['id'] for gateway in gateways['data'] if gateway['id'] == mqtt_message[1]), None)
+            gateway['id'] for gateway in gateways['data'] if gateway['id'] == str(mqtt_message[1])), None)
 
-        if gateway_exists is not True:
-            new_gateway = {
-                "id": mqtt_messages[1],
-                "list": {
-                    "cluster": [],
-                    "device": [],
-                }
-            }
+        if gateway_exists is None:
+            gateways['data'].append({
+                "id": str(mqtt_message[1]),
+                "cluster": [],
+                "device": []
+            })
 
-            gateways['data'].append(new_gateway)
             file_io.write_gateways(gateways)
 
 # End of MQTT Functions

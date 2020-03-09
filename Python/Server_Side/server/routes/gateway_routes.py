@@ -23,7 +23,6 @@ def generate_gateway_uid():
 
     return random_hexa_uid
 
-
 def register_to_gateway(device_data):
     success = False
 
@@ -37,10 +36,11 @@ def register_to_gateway(device_data):
         # Modify Gateway data
         gateways = file_io.read_gateways()
         gateway_index = helpers.find_index(gateways, device_data['gateway'])
+        print(gateway_index)
 
         if device_data['cluster'] is not None:
-            if device_data['cluster'] not in gateways['data'][gateway_index]['list']['cluster']:
-                gateways['data'][gateway_index]['list']['cluster'].append(
+            if device_data['cluster'] not in gateways['data'][gateway_index]['cluster']:
+                gateways['data'][gateway_index]['cluster'].append(
                     device_data['cluster'])
                 file_io.write_gateways(gateways)
 
@@ -53,7 +53,7 @@ def register_to_gateway(device_data):
                     device_data['gateway'])
                 file_io.write_clusters(clusters)
         else:
-            gateways['data'][gateway_index]['list']['device'].append(
+            gateways['data'][gateway_index]['device'].append(
                 device_data['id'])
             file_io.write_gateways(gateways)
 

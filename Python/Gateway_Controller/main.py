@@ -25,7 +25,7 @@ def init_device_to_server(json_data):
     status = False
 
     try:
-        response = requests.post(constants.network.INIT_DEVICE_ENDPOINT, json=json_data)
+        response = requests.put(constants.network.INIT_DEVICE_ENDPOINT, json=json_data)
 
         if response.raise_for_status() is None:
             json_response = constants.json_schema.SERVER_RESPONSE_VALIDATOR(response.json())
@@ -83,7 +83,7 @@ def init_device_to_file(json_data):
                         ensure_ascii=True, indent=4)
 
 
-class MyTCPHandler(socketserver.BaseRequestHandler):
+class MyTCPHandler(socketserver.StreamRequestHandler):
     """
     The request handler class for our server.
 
@@ -95,7 +95,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         configuration = get_config()
         # Note that the serialized JSON needs to be newline terminated
-        received_json = json.loads(self.request.readline().strip())
+        received_json = json.loads(self.rfile.readline().strip())
         self.data = constants.json_schema.END_DEVICE_CONF_VALIDATOR(
             received_json)
 
@@ -133,7 +133,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 self.reply_json = {'status' : 'failed'}
 
         # The reply is also newline terminated
-        self.request.sendall(json.dumps(self.reply_json) + '\n')
+        self.wfile.write((json.dumps(self.reply_json) + '\n').encode())
 
 
 # Initializer Functions

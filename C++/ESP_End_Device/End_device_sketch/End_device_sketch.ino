@@ -86,7 +86,6 @@ bool init_runtime_params(){
     Serial.println("Failed to parse config.json!");
     return false;
   } else {
-    serializeJsonPretty(json_doc, Serial);
     // Change global runtime variables here
     device_id = String(json_doc["id"].as<const char*>());
     cluster_id = String(json_doc["cluster"].as<const char *>());
@@ -158,15 +157,13 @@ bool connect_to_wifi(){
     // and connect to the one with the highest RSSI
     scan_for_open_wifi();
   }
-
-  Serial.println(ssid);
-  Serial.println(passwd);
+  
   WiFi.begin(ssid, passwd);
 
   // Will loop indefinitely while not connected
   while(WiFi.status() != WL_CONNECTED){
     delay(500);
-    Serial.print(WiFi.status());
+    Serial.print('.');
   }
 
   Serial.println("");
@@ -192,6 +189,7 @@ bool init_to_gateway(){
     // Create JSON to send
     StaticJsonDocument<STATIC_JSON_SIZE> json_req;
 
+    json_req["code"] = "INIT";
     json_req["id"] = device_id;
     json_req["cluster"] = cluster_id;
     json_req["type"] = OTA_DEVICE_TYPE;
@@ -219,7 +217,9 @@ bool init_to_gateway(){
       Serial.println("ArduinoJSON deserialization error!");
       Serial.println(err.c_str());
     } else {
-      if(json_reply["status"].as<String>() == String("success")){
+      if(!json_reply.containsKey("status")){
+        Serial.println('Bad JSON Response from Gateway!');
+      } else if(json_reply["status"].as<const char*>() == "success"){
         // Use Explicit Casting
         buffer_size = json_reply["buffer"].as<int>();
         cmd_msg_separator = json_reply["msg_separator"].as<char>();
@@ -227,9 +227,11 @@ bool init_to_gateway(){
 
         // Implicit casting here
         cmd_mcast_addr = String(json_reply["cmd_mcast_addr"].as<const char*>());
+        gateway_init_success = true;
+      } else {
+        Serial.println("Failed to initialize OTA Service for device!");
       }
       
-      gateway_init_success = true;
     }
   } else {
     Serial.println("Failed to connect to Gateway!");
@@ -238,7 +240,7 @@ bool init_to_gateway(){
   return gateway_init_success;
 }
 
-// Creates Multicast Listeener and bind to UdpContext
+// Creates Multicast Listener and bind to UdpContext
 bool set_mcast_listener(UdpContext* target_udp_ctx, String target_mcast_addr, unsigned int target_mcast_port){
   if (target_udp_ctx){
     target_udp_ctx->unref();
@@ -537,6 +539,7 @@ void handle_ota_service(){
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("");
 
   // Read config.json to initialize global variables
   bool init_params_success = init_runtime_params();
@@ -554,7 +557,7 @@ void setup() {
   bool init_gateway_success = init_to_gateway();
   // If successfully connected to WiFi (and Device ID Defined)
   // try to initialize to TCP Socket Server
-  if(!init_params_success || !gateway_wifi_connected){
+  if(!init_params_success || !gateway_wifi_connected || !init_gateway_success){
     Serial.println("OTA Service Unavailable!");
   }
 
