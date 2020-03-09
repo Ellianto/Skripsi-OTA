@@ -2,7 +2,9 @@
     "data": [
         {
             "cluster": [],
-            "device": [],
+            "device": [
+                "target_device_x01"
+            ],
             "id": "0x9C4E1862"
         }
     ]

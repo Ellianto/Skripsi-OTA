@@ -36,7 +36,6 @@ def register_to_gateway(device_data):
         # Modify Gateway data
         gateways = file_io.read_gateways()
         gateway_index = helpers.find_index(gateways, device_data['gateway'])
-        print(gateway_index)
 
         if device_data['cluster'] is not None:
             if device_data['cluster'] not in gateways['data'][gateway_index]['cluster']:
@@ -53,9 +52,10 @@ def register_to_gateway(device_data):
                     device_data['gateway'])
                 file_io.write_clusters(clusters)
         else:
-            gateways['data'][gateway_index]['device'].append(
-                device_data['id'])
-            file_io.write_gateways(gateways)
+            if device_data['id'] not in gateways['data'][gateway_index]['device']:
+                gateways['data'][gateway_index]['device'].append(
+                    device_data['id'])
+                file_io.write_gateways(gateways)
 
         success = True
     finally:

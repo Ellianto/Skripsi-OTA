@@ -87,8 +87,8 @@ bool init_runtime_params(){
     return false;
   } else {
     // Change global runtime variables here
-    device_id = String(json_doc["id"].as<const char*>());
-    cluster_id = String(json_doc["cluster"].as<const char *>());
+    device_id = json_doc["id"].as<String>();
+    cluster_id = (json_doc["cluster"].is<String>()) ? json_doc["cluster"].as<String>() : String();
 
     if(!device_id){ // Device ID is null
       return false;
@@ -96,11 +96,11 @@ bool init_runtime_params(){
 
     if(json_doc.containsKey("ssid")){
       Serial.println("Using SSID from config.json...");
-      ssid = String(json_doc["ssid"].as<const char*>());
+      ssid = json_doc["ssid"].as<String>();
     }
 
     if(json_doc.containsKey("passwd")){
-      passwd = String(json_doc["passwd"].as<const char*>());
+      passwd = json_doc["passwd"].as<String>();
     }
     
     return true;
@@ -163,7 +163,6 @@ bool connect_to_wifi(){
   // Will loop indefinitely while not connected
   while(WiFi.status() != WL_CONNECTED){
     delay(500);
-    Serial.print('.');
   }
 
   Serial.println("");
@@ -185,81 +184,74 @@ bool init_to_gateway(){
   bool is_connected = tcp_client.connect(WiFi.gatewayIP().toString().c_str(), TCP_GATEWAY_SOCKET_PORT);
   bool gateway_init_success = false;
 
-  if(is_connected){
-    // Create JSON to send
-    StaticJsonDocument<STATIC_JSON_SIZE> json_req;
-
-    json_req["code"] = "INIT";
-    json_req["id"] = device_id;
-    json_req["cluster"] = cluster_id;
-    json_req["type"] = OTA_DEVICE_TYPE;
-
-    // Serialize minified JSON into String
-    String temp_buf;
-    serializeJson(json_req, temp_buf);
-
-    // Send via TCP Socket stream
-    tcp_client.println(temp_buf);
-
-    // Wait for Gateway's reply
-    char *gateway_reply = "";
-
-    while (tcp_client.connected() || tcp_client.available()){
-      if(tcp_client.available()){
-        strcat(gateway_reply, tcp_client.readStringUntil('\n').c_str());
-      }
-    }
-
-    StaticJsonDocument<STATIC_JSON_SIZE> json_reply;
-    auto err = deserializeJson(json_reply, gateway_reply);
-
-    if(err){
-      Serial.println("ArduinoJSON deserialization error!");
-      Serial.println(err.c_str());
-    } else {
-      if(!json_reply.containsKey("status")){
-        Serial.println('Bad JSON Response from Gateway!');
-      } else if(json_reply["status"].as<const char*>() == "success"){
-        // Use Explicit Casting
-        buffer_size = json_reply["buffer"].as<int>();
-        cmd_msg_separator = json_reply["msg_separator"].as<char>();
-        cmd_mcast_port = json_reply["cmd_mcast_port"].as<int>();
-
-        // Implicit casting here
-        cmd_mcast_addr = String(json_reply["cmd_mcast_addr"].as<const char*>());
-        gateway_init_success = true;
-      } else {
-        Serial.println("Failed to initialize OTA Service for device!");
-      }
-      
-    }
-  } else {
+  if(!tcp_client.connected()){
     Serial.println("Failed to connect to Gateway!");
+    return gateway_init_success;
+  }
+  
+  // Create JSON to send
+  StaticJsonDocument<STATIC_JSON_SIZE> json_req;
+
+  json_req["code"] = "INIT";
+  json_req["id"] = device_id;
+  json_req["cluster"] = cluster_id;
+  json_req["type"] = OTA_DEVICE_TYPE;
+
+  tcp_client.println(json_req.as<String>());
+
+  StaticJsonDocument<JSON_FILE_LIMIT> json_reply;
+  auto err = deserializeJson(json_reply, tcp_client);
+  tcp_client.stop();
+  if(err){
+    Serial.println("ArduinoJSON deserialization error!");
+    Serial.println(err.c_str());
+  } else {
+    String response_status = json_reply["status"].as<String>();
+    
+    if(!response_status){
+      Serial.println("Bad JSON Response from Gateway!");
+    } else if(response_status.equals("success")){
+      // Use Explicit Casting
+      buffer_size = json_reply["buffer"].as<unsigned int>();
+      cmd_msg_separator = json_reply["msg_separator"].as<char>();
+      cmd_mcast_port = json_reply["cmd_mcast_port"].as<unsigned int>();
+
+      // Implicit casting here
+      cmd_mcast_addr = json_reply["cmd_mcast_addr"].as<String>();
+      gateway_init_success = true;
+    } else {
+      Serial.println("Failed to initialize OTA Service for device!");
+    }
   }
 
   return gateway_init_success;
 }
 
 // Creates Multicast Listener and bind to UdpContext
-bool set_mcast_listener(UdpContext* target_udp_ctx, String target_mcast_addr, unsigned int target_mcast_port){
-  if (target_udp_ctx){
-    target_udp_ctx->unref();
-    target_udp_ctx = 0;
+bool set_mcast_listener(String target_ctx, String target_mcast_addr, unsigned int target_mcast_port){
+  if (target_ctx.equals("cmd")){
+    if(cmd_udp_context){
+      cmd_udp_context->unref();
+      cmd_udp_context = 0;
+    }
+  } else if(target_ctx.equals("data")){
+    if (data_udp_context){
+      data_udp_context->unref();
+      data_udp_context = 0;
+    }
+  } else {
+    return false;
   }
 
-  int temp_arr[4]; 
-  int* local_ip_octets = parse_ipv4_addr(temp_arr, WiFi.localIP().toString());
-  ip4_addr_t* local_ip;
-  IP4_ADDR(local_ip, local_ip_octets[0], local_ip_octets[1], local_ip_octets[2], local_ip_octets[3]);
+  ip_addr* mcast_addr = new ip_addr;
+  mcast_addr->addr = ipaddr_addr(target_mcast_addr.c_str());
 
-  int another_arr[4];
-  int* mcast_ip_octets = parse_ipv4_addr(another_arr, target_mcast_addr);
-  ip4_addr_t* mcast_addr;
-  IP4_ADDR(mcast_addr, mcast_ip_octets[0], mcast_ip_octets[1], mcast_ip_octets[2], mcast_ip_octets[3]);
+  ip_addr* local_addr = new ip_addr;
+  local_addr->addr = ipaddr_addr(WiFi.localIP().toString().c_str());
 
   // Joins IGMP Group first
   for(int attempts = 0; attempts < 3; attempts++){
-    int err_code = igmp_joingroup(local_ip, mcast_addr);
+    int err_code = igmp_joingroup(local_addr, mcast_addr);
 
     if (err_code != ERR_OK){
       Serial.print("IGMP Join Group Error Code : ");
@@ -268,11 +260,29 @@ bool set_mcast_listener(UdpContext* target_udp_ctx, String target_mcast_addr, un
     }
   }
 
-  target_udp_ctx = new UdpContext;
-  target_udp_ctx->ref();
+  if (target_ctx.equals("cmd")){
+    cmd_udp_context = new UdpContext;
+    cmd_udp_context->ref();
 
-  // Set custom packet listener
-  if (!target_udp_ctx->listen(IPADDR4_INIT(INADDR_ANY), target_mcast_port)){
+    // Set custom packet listener
+    if (!cmd_udp_context->listen(IPADDR4_INIT(INADDR_ANY), target_mcast_port)){
+      return false;
+    }
+
+    cmd_udp_context->onRx(&on_cmd_mcast_packet);
+  }
+  else if (target_ctx.equals("data")){
+    data_udp_context = new UdpContext;
+    data_udp_context->ref();
+
+    // Set custom packet listener
+    if (!data_udp_context->listen(IPADDR4_INIT(INADDR_ANY), target_mcast_port)){
+      return false;
+    }
+
+    data_udp_context->onRx(&on_recv_data);
+  }
+  else{
     return false;
   }
 
@@ -284,18 +294,14 @@ bool set_mcast_listener(UdpContext* target_udp_ctx, String target_mcast_addr, un
 // Or if received abort command
 void discard_data_context(){
   // Leave the IGMP group
-  int temp_arr[4];
-  int *local_ip_octets = parse_ipv4_addr(temp_arr, WiFi.localIP().toString());
-  ip4_addr_t *local_ip;
-  IP4_ADDR(local_ip, local_ip_octets[0], local_ip_octets[1], local_ip_octets[2], local_ip_octets[3]);
+  ip_addr* mcast_addr = new ip_addr;
+  mcast_addr->addr = ipaddr_addr(data_mcast_addr.c_str());
 
-  int another_arr[4];
-  int *mcast_ip_octets = parse_ipv4_addr(another_arr, data_mcast_addr);
-  ip4_addr_t *mcast_addr;
-  IP4_ADDR(mcast_addr, mcast_ip_octets[0], mcast_ip_octets[1], mcast_ip_octets[2], mcast_ip_octets[3]);
+  ip_addr* local_addr = new ip_addr;
+  local_addr->addr = ipaddr_addr(WiFi.localIP().toString().c_str());
 
   for(int attempts = 0; attempts < 3; attempts++){
-    int err_code = igmp_leavegroup(local_ip, mcast_addr);
+    int err_code = igmp_leavegroup(local_addr, mcast_addr);
 
     if (err_code != ERR_OK){
       Serial.print("IGMP Leave Group Error Code : ");
@@ -312,32 +318,17 @@ void discard_data_context(){
   buffer_size = 0;
 }
 
-// Parse %d.%d.%d.%d to int[4]
-int *parse_ipv4_addr(int *holder, String addr_string){
-  char *octet = strtok((char *)addr_string.c_str(), ".");
-
-  for (int idx = 0; idx < 4; idx++){
-    if (octet != NULL)
-      continue;
-
-    holder[idx] = int(octet);
-    octet = strtok(NULL, ".");
-  }
-
-  return holder;
-}
 
 bool should_listen(const char* received_id){
   bool for_me = true;
-  String target_id = String(received_id);
   
   if (update_type == 'c'){
-    if (!cluster_id || cluster_id != target_id){
+    if (!cluster_id || !cluster_id.equals(received_id)){
       for_me = false;
     }
   }
   else if (update_type == 'd'){
-    if (target_id != device_id){
+    if (!device_id.equals(received_id)){
       for_me = false;
     }
   }
@@ -383,11 +374,8 @@ void reply_cmd(const char* msg[], int arr_length, char delimiter){
 
   cmd_udp_context->append(holder.c_str(), holder.length());
 
-//  ip_addr_t *remote_ip = (ip_addr_t *)cmd_udp_context->getRemoteAddress();
   uint16_t remote_port = cmd_udp_context->getRemotePort();
   cmd_udp_context->send(cmd_udp_context->getRemoteAddress(), remote_port);
-
-  return;
 }
 
 // Receive UDP datagram from Data Multicast Address
@@ -471,12 +459,11 @@ void on_cmd_mcast_packet(){
 
     // Fourth and fifth part are multicast address and port (respectively)
     // to be used for data transfer later
-    data_mcast_addr = String(parse_cmd(cmd_msg_separator));
+    data_mcast_addr = (String)parse_cmd(cmd_msg_separator);
     const char* data_mcast_port = parse_cmd('\n');
 
     // Create another multicast listener with UdpContext and set listener
-    set_mcast_listener(data_udp_context, data_mcast_addr, atoi(data_mcast_port));
-    data_udp_context->onRx(&on_recv_data);
+    set_mcast_listener("data", data_mcast_addr, atoi(data_mcast_port));
 
     char* buf_size;
     itoa(possible_buffer, buf_size, 10);
@@ -563,14 +550,13 @@ void setup() {
 
   // If successfully initialized to gateway, setup Async Multicast Listener
   if(init_gateway_success){
-    set_mcast_listener(cmd_udp_context, cmd_mcast_addr, cmd_mcast_port);
-    cmd_udp_context->onRx(&on_cmd_mcast_packet);
-    state = STANDBY_PHASE;
+    set_mcast_listener("cmd", cmd_mcast_addr, cmd_mcast_port);
     Serial.println("Starting OTA Service Listener...");
   }
 }
 
 void loop() {
   handle_ota_service();
+  
   // put your main code here, to run repeatedly:
 }
