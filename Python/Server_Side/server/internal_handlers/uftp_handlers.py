@@ -37,7 +37,7 @@ def initialize_params(target_id, is_cluster=False):
             init_obj['message'] = 'No Device with that ID exists!'
         else:
             gateway_ids = [] if target_device['gateway'] is None else [target_device['gateway']]
-            target_dir = constants.paths.BASE_DIR / 'device' / target_device['id']
+            target_dir = constants.paths.BASE_DIR / 'devices' / target_device['id']
     else:
         target_cluster = helper.get_cluster(target_id)
 
@@ -46,22 +46,30 @@ def initialize_params(target_id, is_cluster=False):
             init_obj['message'] = 'No Cluster with that ID exists!'
         else:
             gateway_ids = target_cluster['gateways']
-            target_dir = constants.paths.BASE_DIR / 'cluster' / target_cluster['id']
+            target_dir = constants.paths.BASE_DIR / 'clusters' / target_cluster['id']
+
+    target_file = None
 
     if target_dir is not None:
         if target_dir.exists() is not True:
             init_obj['status_code'] = constants.strings.STATUS_CODE_MISSING_DATA
-            init_obj['message'] = 'Target file not found!'
+            init_obj['message'] = 'Target Directory not found!'
         elif len(gateway_ids) == 0:
             init_obj['status_code'] = constants.strings.STATUS_CODE_UNINITIALIZED
             init_obj['message'] = 'Target Device/Cluster has not been initialized yet!'
         else:
             init_obj['status_code'] = constants.strings.STATUS_CODE_SUCCESS
             init_obj['message'] = 'Parameter Initialization Successful!'
+            target_file = target_dir / (target_id + constants.paths.FILE_EXTENSIONS[target_device['type']])
 
-            shutil.make_archive(str(target_dir / target_id), 'zip', str(target_dir))
-    
-    init_obj['target_file'] = None if target_dir is None else str(target_dir / (target_id + '.zip'))
+            if target_file.exists() is not True:
+                target_file = None
+
+    if target_file is None:
+        init_obj['status_code'] = constants.strings.STATUS_CODE_MISSING_DATA
+        init_obj['message'] = 'Target file not found!'
+
+    init_obj['target_file'] = None if target_file is None else str(target_file)
     init_obj['gateway_ids'] = gateway_ids
 
     return init_obj
@@ -105,16 +113,20 @@ def parse_status_file():
         'CONNECT': connect_arr,
         'RESULT': results,
         'STATUS': stats_arr,
-        'FAILED': failed_gateways,
+        'FAILED': {
+            'conn_failed': list(failed_gateways['conn_failed']),
+            'rejected': list(failed_gateways['rejected']),
+            'lost': list(failed_gateways['lost'])
+        },
     }
 
 
 def run_uftp_server(gateway_ids, target_file, retries=2):
     session_list = []
     success = None
-    hostlist = ','.join(gateway_id for gateway_id in gateway_ids)
+    hostlist = ','.join(gateway_id[2:] for gateway_id in gateway_ids)
 
-    if len(gateway_ids) > 0:
+    if len(gateway_ids) > 1:
         hostlist = '"' + hostlist + '"'
 
     for attempts in range(retries):
@@ -137,7 +149,7 @@ def run_uftp_server(gateway_ids, target_file, retries=2):
                     break
             else:
                 message = 'Something wrong occured!'
-        except TimeoutError:
+        except psutil.TimeoutExpired:
             message = 'UFTP Server execution timed out!'
             print(message)
         finally:
@@ -185,7 +197,7 @@ def distribute_updated_code(target_id, is_cluster=False, retries=2):
         status_response['message'] = 'An error occurred!'
         raise
     finally:
-        if constants.path.STATUS_FILE_PATH.exists() is True:
+        if constants.paths.STATUS_FILE_PATH.exists() is True:
             constants.paths.STATUS_FILE_PATH.unlink()
 
     return status_response

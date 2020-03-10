@@ -17,7 +17,7 @@ import requests
 
 
 # File Handling Section
-def md5Checksum(block_size):
+def md5_checksum(block_size):
     hash = hashlib.md5()
     with constants.paths.TEMP_DATA_FILE.open(mode='rb') as f:
         for block in iter(lambda: f.read(block_size), b''):
@@ -100,7 +100,7 @@ def create_multicast_socket(target_address, bind_port):
     return mcast_sock
 
 
-def listen_command_messages(mcast_sock, buf_size=1024, separator='|', timeout=None):
+def listen_command_messages(mcast_sock, buf_size=1460, separator='|', timeout=None):
     mcast_sock.settimeout(timeout)
     msg, addr = mcast_sock.recvfrom(buf_size)
     return [val.strip() for val in msg.decode().split(separator)], addr
@@ -146,7 +146,7 @@ def should_listen(target_id, device_info, is_cluster=False):
     return device_info['id' if is_cluster is False else 'cluster'] == target_id
 
 
-# TODO: Match these with changes in the Gateway side
+# TODO: Match these with changes in the Gateway side and ESP side
 def handle_ota_update(gateway_params, device_info):
     #! **START PHASE**
     # Initial Run
@@ -162,7 +162,6 @@ def handle_ota_update(gateway_params, device_info):
                 #! Standby for gateway instructions 
                 # Expected message format : [c or d]|[target_id]|[file_size]|[data_mcast_addr]|[data_mcast_port]\n
                 cmd_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                        buf_size=gateway_params['buffer_size'],
                                                         separator=gateway_params['message_separator'])
 
                 #! Ignore if not session initialization message
@@ -190,7 +189,6 @@ def handle_ota_update(gateway_params, device_info):
                     ]
                     
                 #! Reply about my free size (enough or not enough)
-                # Reply 
                 reply_message = gateway_params['message_separator'].join(msg_array)
                 reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
 
@@ -208,10 +206,9 @@ def handle_ota_update(gateway_params, device_info):
 
                 #! **TRANSFER PHASE**
                 #! Poll until transfer/abort command
-                # Expected message format : [t or a]|[target_id]|[buffer_size]\n
+                # Expected message format : [t or a]|[target_id]|[file_checksum]|[buffer_size]\n
                 while True:
                     transfer_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                            buf_size=gateway_params['buffer_size'],
                                                                             separator=gateway_params['message_separator'])
 
                     if should_listen(transfer_messages[1], device_info, cmd_messages[0] == 'c') is not True:
@@ -227,15 +224,17 @@ def handle_ota_update(gateway_params, device_info):
                     continue
 
                 #! Receive Files (if not abort)
-                file_received_len = receive_multicast_data(data_multicast_socket, file_size, int(transfer_messages[2]))
+                data_buf_size = int(transfer_messages[3])
+                file_received_len = receive_multicast_data(data_multicast_socket, file_size, data_buf_size)
                 do_checksum = True
+
+                # TODO: Add reply + timeout here
 
                 #! **VERIFICATION PHASE**
                 #! Poll until checksum/abort command
                 # Expected message format : [h or a]|[target_id]|[file_checksum]\n
                 while True:
                     checksum_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                            buf_size=gateway_params['buffer_size'],
                                                                             separator=gateway_params['message_separator'], 
                                                                             timeout=3.0)
 
@@ -251,8 +250,8 @@ def handle_ota_update(gateway_params, device_info):
                     print('Aborting After Transfer Phase...')
 
                 #! Match Checksum and reply (if not abort)
-                server_checksum = checksum_messages[2]
-                if server_checksum != md5Checksum(gateway_params['buffer_size']):
+                server_checksum = transfer_messages[1]
+                if server_checksum != md5_checksum(data_buf_size):
                     ack_reply = [constants.cmd_code.CHECKSUM_MISMATCH,
                                  device_info['device_id']]
                 else:
@@ -268,7 +267,6 @@ def handle_ota_update(gateway_params, device_info):
                 # Expected message format : [s or a]|[target_id]\n
                 while True:
                     start_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                            buf_size=gateway_params['buffer_size'],
                                                                             separator=gateway_params['message_separator'],
                                                                             timeout=5.0)
 
@@ -308,7 +306,7 @@ def handle_ota_update(gateway_params, device_info):
 
             global_multicast_socket.close()
     
-    
+
 # End of Multicast Handling Section
 
 

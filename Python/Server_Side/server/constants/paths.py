@@ -1,4 +1,7 @@
 from server import ROOT_DIR
+from pathlib import Path
+
+TARGET_DIR = '/home/pi/gateway_code/main_data/'
 
 BASE_DIR = ROOT_DIR / 'data'
 
@@ -14,3 +17,8 @@ UFTP_SERVER_EXE_PATH = UFTP_DIR / 'uftp.exe'
 
 FILE_LIST = [DEVICES_FILE_PATH, CLUSTERS_FILE_PATH, GATEWAYS_FILE_PATH]
 DIR_LIST = [BASE_DIR / 'clusters', BASE_DIR / 'devices']
+
+FILE_EXTENSIONS = {
+    'ESP' : '.ino.nodemcu.bin',
+    'RPi' : '.zip'
+}

@@ -124,7 +124,6 @@ class MyTCPHandler(socketserver.StreamRequestHandler):
 
                 self.reply_json = {
                     'status': 'success',
-                    'buffer': configuration['buffer_size'],
                     'msg_separator': constants.network.CMD_MSG_SEPARATOR,
                     'cmd_mcast_addr': cmd_mcast_addr,
                     'cmd_mcast_port': cmd_mcast_port
@@ -165,7 +164,6 @@ def init_conf(retries=0):
                             'gateway_uid' : conf_data['gateway_uid'],
                             'max_log_size' : conf_data['max_log_size'],
                             'max_log_count' : conf_data['max_log_count'],
-                            'buffer_size' : conf_data['buffer_size'],
                             'end_device_multicast_addr' : conf_data['end_device_multicast_addr'],
                         }
 
@@ -379,7 +377,8 @@ def listen_for_reply(mcast_sock, buf_size=1024):
 
 
 def multicast_update(target_id, is_cluster=False):
-    #! Get requred params and infos
+    #! **START PHASE**
+    #! Get required params and infos
     configuration = get_config()
 
     devices = get_devices()
@@ -415,15 +414,17 @@ def multicast_update(target_id, is_cluster=False):
 
     send_mcast_cmd(channel_setup_msg, cmd_mcast_addr)
 
-    clients_ok = False
-    clients_replied = []
-
     #! Poll for client response
     # Expected message format : [OK or NO or FA]|[device_id]|[possible_buffer_size]\n
+    clients_ok = False
+    clients_replied = []
     buffer_limit = 1460
+
     while True:
         try:
             reply_messages = listen_for_reply(cmd_mcast_socket, buf_size=configuration['buffer_size'])
+
+            print('Received ' + reply_messages[0] + ' from ' + reply_messages[1])
 
             if reply_messages[0] == 'OK' and reply_messages[1] in target_clients:
                 clients_replied.append(reply_messages[1])
@@ -468,12 +469,13 @@ def multicast_update(target_id, is_cluster=False):
     begin_transfer_msg = [
         't',
         str(target_id),
-        buffer_limit
+        str(checksum),
+        buffer_limit,
     ]
 
-    time.sleep(0.5)
+    time.sleep(0.3)
     send_mcast_cmd(begin_transfer_msg, cmd_mcast_addr)
-    time.sleep(0.5)
+    time.sleep(0.7)
 
     #! Send chunks of file to client
     for piece in read_in_chunks(target_file):
@@ -484,33 +486,24 @@ def multicast_update(target_id, is_cluster=False):
     data_mcast_socket.close()
 
     #! **VERIFICATION PHASE**
-    #! Send File checksum for integrity check
-    checksum_msg = [
-        'h',
-        str(target_id),
-        str(checksum)
-    ]
-
-    # Wait for blocking clients
-    time.sleep(1)
-    send_mcast_cmd(checksum_msg, cmd_mcast_addr)
-
+    #! Poll for client response
+    # Expected message format : [ACK or NEQ or DTO]|[device_id]\n
     clients_acked = []
     transfer_ok = False
 
-    #! Poll for client response
-    # Expected message format : [ACK or NEQ]|[device_id]\n
     while True:
         try:
             reply_messages = listen_for_reply(
                 cmd_mcast_socket, buf_size=configuration['buffer_size'])
 
-            if reply_messages[0] == 'ACK' and reply_messages[1] in target_clients:
-                clients_replied.append(reply_messages[1])
-            elif clients_replied[0] in ['NEQ']:
+            print('Received ' + reply_messages[0] + ' from ' + reply_messages[1])
+
+            if reply_messages[0] == 'ACK' and reply_messages[1] in clients_replied:
+                clients_acked.append(reply_messages[1])
+            elif clients_acked[0] in ['NEQ', 'DTO']:
                 break
         except sock.timeout:
-            print('Some clients failed to ACK')
+            print('Some clients failed to reply!')
             break
         except OSError:
             print('Specified Buffer size is not enough!')

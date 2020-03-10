@@ -17,6 +17,7 @@
 
 #define JSON_FILE_NAME "/config.json"
 
+// Only here for redundancy, the template itself should define it
 #define DEVICE_TYPE "ESP"
 
 //Save the config.json to SPIFFS for persistent storage
@@ -29,12 +30,10 @@ bool saveConfig(){
   device["cluster"] = nullptr;
   device["ssid"] = "PI_GW_01";
   device["passwd"] = "teknik_komputer";
-  // device["ssid"] = "ELLI";
-  // device["passwd"] = "gading8899";
+  device["tcp_gw_port"] = 6666;
 
   File configFile = SPIFFS.open(JSON_FILE_NAME, "w");
-  if (!configFile)
-  {
+  if (!configFile){
     Serial.println("Failed to open config file for writing");
     return false;
   }

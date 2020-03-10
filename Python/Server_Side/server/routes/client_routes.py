@@ -115,8 +115,7 @@ def ota_device():
             status_response = uftp_handlers.distribute_updated_code(target_device['id'])
 
             if status_response['status'] == constants.strings.STATUS_CODE_SUCCESS:
-                target_topic = constants.mqtt.CLUSTER_TOPIC + '/' + \
-                    target_device['cluster'] if target_device['cluster'] is not None else constants.mqtt.GLOBAL_TOPIC
+                target_topic = constants.mqtt.CLUSTER_TOPIC + '/' + target_device['cluster'] if target_device['cluster'] is not None else constants.mqtt.GLOBAL_TOPIC
 
                 mqtt_client.publish(target_topic, 'update|device|' + target_device['id'], qos=2)
     except MultipleInvalid:

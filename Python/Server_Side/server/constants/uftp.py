@@ -21,6 +21,7 @@ PROCESS_TIMEOUT = 30
 
 # Still need to append client list and file list/target direactory
 UFTP_SERVER_CMD = [str(paths.UFTP_SERVER_EXE_PATH),
+                    '-o',  # Flag to solve dir path problems
                     '-l',  # Unravel Symbolic Links
                     '-z',  # Run the Server in Sync Mode, so clients will only receive new/updated files
                     '-t', TTL_VALUE,  # TTL value for Multicast Packets, by default is 1 so we turn it up a little
@@ -29,6 +30,7 @@ UFTP_SERVER_CMD = [str(paths.UFTP_SERVER_EXE_PATH),
                     '-R', TRANSFER_RATE,
                     # Base directory for the files, for client-side directory management
                     '-E', str(paths.BASE_DIR),
+                    '-D', str(paths.TARGET_DIR),
                     # Output for status file, to confirm the file transfer result.
                     '-S', str(paths.STATUS_FILE_PATH),
                     # The log file output. If undefined, defaults to printing logs to stderr
@@ -36,8 +38,8 @@ UFTP_SERVER_CMD = [str(paths.UFTP_SERVER_EXE_PATH),
                     '-g', MAX_LOG_SIZE,  # in MB, specifies limit size before a log file is backed up
                     '-n', MAX_LOG_COUNT,  # Default UFTP Value, keeps max 5 iterations of log backups
                     '-p', UFTP_PORT_NUMBER,  # The port number the server will be listening from
-                    '-M', PUB_MULTICAST_ADDR,  # The Initial Public Multicast Address for the ANNOUNCE phase
-                    '-P', PRIV_MULTICAST_ADDR,  # The Private Multicast Address for FILE TRANSFER phase
+                    # '-M', PUB_MULTICAST_ADDR,  # The Initial Public Multicast Address for the ANNOUNCE phase
+                    # '-P', PRIV_MULTICAST_ADDR,  # The Private Multicast Address for FILE TRANSFER phase
                     # The number of times a message will be repeated (10-50). defaults to 20
                     '-s', ROBUSTNESS,
                     '-H']  # List of comma separated target client IDs, enclosed in "" if more than one
