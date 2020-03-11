@@ -1,5 +1,7 @@
 // For ESP8266 WiFi APIs (including WiFi Client)
+#include "user_interface.h"
 #include <ESP8266WiFi.h>
+#include <WiFiUdp.h>
 
 // For parsing config.json saved in SPIFFS
 #include <ArduinoJson.h>
@@ -29,7 +31,6 @@ String cluster_id;
 char update_type =  NULL;
 
 // Can probably make this a class/struct
-size_t file_size = 0;
 unsigned int buffer_size = 0;
 unsigned int data_timeout = 0;
 String data_mcast_addr;
@@ -117,6 +118,7 @@ String scan_for_open_wifi(){
 bool connect_to_wifi(String ssid, String passwd){
   // Set to station mode and disconnect from last connected AP
   WiFi.mode(WIFI_STA);
+  // wifi_set_sleep_type(NONE_SLEEP_T);
   WiFi.disconnect();
 
   if(!ssid || !passwd){
@@ -152,6 +154,7 @@ bool connect_to_wifi(String ssid, String passwd){
 // Clean up function for data_udp_context
 // Called when successfully received all data
 // Or if received abort command
+//TODO: Error -6 leaving IGMP Group, check it
 void discard_data_context(){
   // Leave the IGMP group
   ip_addr* mcast_addr = new ip_addr;
@@ -179,48 +182,53 @@ void discard_data_context(){
 }
 
 // Based on ArduinoOTA's readStringUntil
-const char* parse_cmd(char delimiter){
+String parse_cmd(){
   String holder;
   int val;
 
   while(true){
     val = cmd_udp_context->read();
+    char char_cast = char(val);
 
-    if(val < 0 || val == '\0' || val == delimiter){
+    if(val < 0 || char_cast == '\0' || char_cast == cmd_msg_separator || char_cast == '\n'){
       break;
     } 
 
-    holder += static_cast<char>(val);
+    holder += char_cast;
   }
 
-  return holder.c_str();
+  return holder;
 }
 
 // Constructs and sends reply message to Command Multicast Address
-void reply_cmd(const char* msg[], int arr_length, char delimiter){
+void reply_cmd(String msg[], int arr_length){
   String holder = "";
   holder += msg[0];
 
   for(int idx = 1; idx < arr_length; idx++){
-    holder += delimiter;
+    holder += cmd_msg_separator;
     holder += msg[idx];
   }
 
   holder += '\n';
+  Serial.print("Reply to Gateway : ");
+  Serial.println(holder);
 
   cmd_udp_context->append(holder.c_str(), holder.length());
   cmd_udp_context->send(cmd_udp_context->getRemoteAddress(), cmd_udp_context->getRemotePort());
 }
 
+// Cleanup and reset globals
+// Called on abort command, or when all is complete
 void cleanup_states(){
   Update.end();
 
   discard_data_context();
   state = STANDBY_PHASE;
   update_type = NULL;
-  file_size = 0;
   data_mcast_addr = String();
   delete md5_checksum;
+  ESP.reset();
 }
 
 // Receive UDP datagram from Data Multicast Address
@@ -232,13 +240,12 @@ void on_recv_data(){
 
   data_timeout = DATA_TIMEOUT_VAL;
 
-  char* temp_buf;
-  size_t read_len = (buffer_size <= data_udp_context->getSize()) ? buffer_size : data_udp_context->getSize();
-  size_t read_size = data_udp_context->read(temp_buf, read_len);
+  size_t data_size = min(buffer_size, data_udp_context->getSize());
+  unsigned char temp_buf[data_size];
+  size_t read_size = data_udp_context->read((char *)temp_buf, data_size);
 
-  // TODO: Lets hope the casting works
   md5_checksum->add((uint8_t*)temp_buf, read_size);
-  Update.write((uint8_t*)temp_buf, read_size);
+  Update.write(temp_buf, read_size);
 
   while(data_udp_context->next()){
     data_udp_context->flush();
@@ -257,8 +264,12 @@ void on_cmd_mcast_packet(){
     return;
   }
 
-  const char* cmd_message = parse_cmd(cmd_msg_separator);
-  const char* target_id = parse_cmd(cmd_msg_separator);
+  String cmd_message = parse_cmd();
+  String target_id = parse_cmd();
+
+  Serial.print(cmd_message);
+  Serial.print(" received with target id ");
+  Serial.println(target_id);
 
   if(update_type != NULL){
     // Return early if not for me
@@ -273,7 +284,7 @@ void on_cmd_mcast_packet(){
   }
 
   if(cmd_message == "a"){
-    const char* cmd_source = parse_cmd('\n');
+    String cmd_source = parse_cmd();
     Serial.print("Received Abort Command from Gateway ");
     Serial.println(cmd_source);
 
@@ -282,17 +293,19 @@ void on_cmd_mcast_packet(){
   }
   
   if (state == STANDBY_PHASE) {
-    if(cmd_message != "c" && cmd_message != "d"){
+    Serial.println("Command Received in Standby Phase!");
+    
+    if(!cmd_message.equals("c") && !cmd_message.equals("d")){
       return;
     }
 
-    Serial.println("Command Received in Standby Phase!");
+    Serial.println("Hey");
     // If pass all the above checks
     // cmd_message should contain update type [d = device, c = cluster]
     update_type = cmd_message[0];
 
     // Third part is the file size, to be parsed to int
-    file_size = atoi(parse_cmd(cmd_msg_separator));
+    size_t file_size = parse_cmd().toInt();
 
     if(!Update.begin(file_size, U_FLASH)){
       // Replies with 2 part message to notify gateway
@@ -304,55 +317,63 @@ void on_cmd_mcast_packet(){
       } else {
         err_code = CMD_PROCESS_ERROR;
       }
-      const char* error_msg[2] = {err_code, device_id.c_str()};
-      reply_cmd(error_msg, 2, cmd_msg_separator);
+      String error_msg[2] = {err_code, device_id};
+      reply_cmd(error_msg, 2);
       return;
     }
+
+    Update.runAsync(true);
 
     // Calculate possible buffer size (based on Update.cpp internal implementation)
     // Default value from Updater.cpp is 256
 
     // Fourth and fifth part are multicast address and port (respectively)
     // to be used for data transfer later
-    data_mcast_addr = (String)parse_cmd(cmd_msg_separator);
-    const char* data_mcast_port = parse_cmd('\n');
+    data_mcast_addr = parse_cmd();
+    unsigned int data_mcast_port = parse_cmd().toInt();
 
     // Create another multicast listener with UdpContext and set listener
-    set_mcast_listener("data", data_mcast_addr, atoi(data_mcast_port));
+    set_mcast_listener("data", data_mcast_addr, data_mcast_port);
 
-    size_t possible_buffer = (ESP.getFreeHeap() > 2 * FLASH_SECTOR_SIZE) ? FLASH_SECTOR_SIZE : 256;
-    char* buf_size;
-    itoa(possible_buffer, buf_size, 10);
+    String possible_buffer = String(UDP_TX_PACKET_MAX_SIZE);
+    // String possible_buffer = String((ESP.getFreeHeap() > (2 * FLASH_SECTOR_SIZE)) ? FLASH_SECTOR_SIZE : 256);
 
     // Replies with 3 part message if all is good
     // The third part specifies buffer size that this device can handle
-    const char *success_reply_msg[3] = {CMD_READY_FOR_TRANSFER, device_id.c_str(), buf_size};
-    reply_cmd(success_reply_msg, 3, cmd_msg_separator);
+    String success_reply_msg[3] = {CMD_READY_FOR_TRANSFER, device_id, possible_buffer};
+    reply_cmd(success_reply_msg, 3);
 
     state = TRANSFER_PHASE;
   } else if (state == TRANSFER_PHASE){
-    if(cmd_message != "t"){
+    Serial.println("Command Received in Transfer Phase!");
+    if(!cmd_message.equals("t")){
       return;
     }
 
-    Serial.println("Command Received in Transfer Phase!");
+    server_checksum = parse_cmd();
+    Serial.print("Received Checksum : ");
+    Serial.println(server_checksum);
 
-    server_checksum = parse_cmd(cmd_msg_separator);
     md5_checksum = new MD5Builder();
     md5_checksum->begin();
+    //Update.setMD5(md5_checksum.c_str());
 
     // Use this buffer_size for receiving data
-    buffer_size = atoi(parse_cmd('\n'));
+    buffer_size = parse_cmd().toInt();
+    Serial.print("Ready to receive data (");
+    Serial.print(buffer_size);
+    Serial.println(" bytes)");
     data_timeout = DATA_TIMEOUT_VAL;
 
     // Does not change state here to make sure
     // This is to make sure that VERIFICATION_PHASE only starts after all data are received
   } else if (state == END_PHASE){
-    if(cmd_message != "s"){
+    Serial.println("Command Received in End Phase!");
+
+    if(!cmd_message.equals("s")){
       return;
     }
 
-    Serial.println("Command Received in End Phase!");
     state = UPDATE_PHASE;
   }
 
@@ -413,12 +434,17 @@ bool set_mcast_listener(String target_ctx, String target_mcast_addr, unsigned in
     if (!data_udp_context->listen(IPADDR4_INIT(INADDR_ANY), target_mcast_port)){
       return false;
     }
-
+    
     data_udp_context->onRx(&on_recv_data);
   }
   else{
     return false;
   }
+
+  Serial.print("Listening for ");
+  Serial.print(target_ctx);
+  Serial.print(" at address ");
+  Serial.println(target_mcast_addr);
 
   return true;
 }
@@ -462,8 +488,6 @@ int init_runtime_params(){
       }
     }
   }
-  
-
 
   return tcp_port;
 }
@@ -508,8 +532,8 @@ bool init_to_gateway(int tcp_port){
       if(!response_status){
         Serial.println("Bad JSON Response from Gateway!");
       } else if(response_status.equals("success")){
-        buffer_size = json_reply["buffer"].as<unsigned int>();
-        cmd_msg_separator = json_reply["msg_separator"].as<char>();
+        Serial.println(json_reply["msg_separator"].as<char>());
+        cmd_msg_separator = json_reply["msg_separator"].as<char>() | '|';
 
         gateway_init_success = set_mcast_listener("cmd", json_reply["cmd_mcast_addr"].as<String>(), json_reply["cmd_mcast_port"].as<unsigned int>());
       } else {
@@ -521,30 +545,37 @@ bool init_to_gateway(int tcp_port){
   return gateway_init_success;
 }
 
+// An extension to set_mcast_listener function
+// Handles some Phases of the OTA (Verification & Update)
 void handle_ota_service(){
-  if(state == TRANSFER_PHASE){
-    if(data_timeout > 0){
-      // Checks whether the Data Mcast Listener timed out
-      delay(10);
-      data_timeout--;
-    } else {
-      // Considers the gateway already in VERIFICATION_PHASE
-      // Tells them we timedout
-      const char *reply_msg[2] = {CMD_DATA_TIMEOUT, device_id.c_str()};
-      reply_cmd(reply_msg, 2, cmd_msg_separator);
+  // Get rid of this first, cause it's making problems
+  // if(state == TRANSFER_PHASE){
+  //   if(data_timeout > 0){
+  //     // Checks whether the Data Mcast Listener timed out
+  //     delay(100);
+  //     data_timeout--;
+  //   } else {
+  //     // Considers the gateway already in VERIFICATION_PHASE
+  //     // Tells them we timedout
+  //     String reply_msg[2] = {CMD_DATA_TIMEOUT, device_id};
+  //     reply_cmd(reply_msg, 2);
 
-      data_timeout = DATA_TIMEOUT_VAL;
-    }
-  } else if(state == VERIFICATION_PHASE){
+  //     data_timeout = DATA_TIMEOUT_VAL;
+  //   }
+  // } else 
+  
+  if(state == VERIFICATION_PHASE){
+    Serial.println("Verifying Checksum...");
     md5_checksum->calculate();
     bool checksum_mismatch = !md5_checksum->toString().equals(server_checksum);
 
-    const char *reply_code = (checksum_mismatch) ? CMD_CHECKSUM_MISMATCH : CMD_TRANSFER_SUCCESS;
-    const char *reply_msg[2] = {reply_code, device_id.c_str()};
-    reply_cmd(reply_msg, 2, cmd_msg_separator);
+    String reply_code = (checksum_mismatch) ? CMD_CHECKSUM_MISMATCH : CMD_TRANSFER_SUCCESS;
+    String reply_msg[2] = {reply_code, device_id};
+    reply_cmd(reply_msg, 2);
 
     state = END_PHASE;
   } else if(state == UPDATE_PHASE){
+    Serial.println("Applying Updates...");
     cleanup_states();
   }
 }
@@ -567,6 +598,7 @@ void setup() {
   // If successfully initialized to gateway, setup Async Multicast Listener
   if(init_gateway_success){
     Serial.println("Starting OTA Service Listener...");
+    state = STANDBY_PHASE;
   }
 
   // User setup here

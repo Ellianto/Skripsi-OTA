@@ -4,7 +4,7 @@ UFTP_PORT_NUMBER = '1044'  # Default from the UFTP manual
 PUB_MULTICAST_ADDR = '230.4.4.1'  # Default from the UFTP manual
 # Default from the UFTP manual, the 'x' will be randomized
 PRIV_MULTICAST_ADDR = '230.5.5.x'
-END_DEVICE_MULTICAST_ADDR = '230.6.6.1:5432'
+END_DEVICE_MULTICAST_ADDR = '224.0.0.150:5432'
 
 # UFTP Manual defaults to IPv4 address (converted to Hex) or last 4 bytes of IPv6 address
 SERVER_UID = '0xABCDABCD'
