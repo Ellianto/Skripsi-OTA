@@ -25,9 +25,9 @@ bool saveConfig(){
   StaticJsonDocument<STATIC_JSON_SIZE> device;
 
   //Modify the JSON keys and values here
-  device["id"] = "target_device_x01";
+  device["id"] = "target_device_x03";
   device["type"] = DEVICE_TYPE;
-  device["cluster"] = nullptr;
+  device["cluster"] = "target_cluster_x01";
   device["ssid"] = "PI_GW_01";
   device["passwd"] = "teknik_komputer";
   device["tcp_gw_port"] = 6666;

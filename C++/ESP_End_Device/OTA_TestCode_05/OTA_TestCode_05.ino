@@ -67,11 +67,11 @@ String server_checksum;
 #define RED_LED_PIN D1
 #define GREEN_LED_PIN D2
 
-//Blinks both LEDs with a period of 2s
+//Fancy Blinking
 
 // Only a wrapper for ease of access
 // Will be run in the setup() section
-void user_setup() {
+void user_setup(){
   pinMode(GREEN_LED_PIN, OUTPUT);
   pinMode(RED_LED_PIN, OUTPUT);
 }
@@ -81,11 +81,16 @@ void user_setup() {
 void user_loop(){
   digitalWrite(GREEN_LED_PIN, HIGH);
   digitalWrite(RED_LED_PIN, HIGH);
-  delay(1000);
-
+  delay(250);
+  digitalWrite(GREEN_LED_PIN, LOW);
+  digitalWrite(RED_LED_PIN, HIGH);
+  delay(250);
+  digitalWrite(GREEN_LED_PIN, HIGH);
+  digitalWrite(RED_LED_PIN, LOW);
+  delay(250);
   digitalWrite(GREEN_LED_PIN, LOW);
   digitalWrite(RED_LED_PIN, LOW);
-  delay(1000);
+  delay(250);
 }
 
 // Scans for open WiFi Networks, connects to the one with highest RSSI, if any

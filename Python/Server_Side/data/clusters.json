@@ -1,3 +1,16 @@
 {
-    "data": []
+    "data": [
+        {
+            "devices": [
+                "target_device_x02",
+                "target_device_x03",
+                "target_device_x04"
+            ],
+            "gateways": [
+                "0xE66E2011"
+            ],
+            "id": "target_cluster_x01",
+            "type": null
+        }
+    ]
 }

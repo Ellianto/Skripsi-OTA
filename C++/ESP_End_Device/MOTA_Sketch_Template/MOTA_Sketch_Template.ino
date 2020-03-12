@@ -225,6 +225,7 @@ void cleanup_states(){
   Update.end();
 
   discard_data_context();
+  data_timeout = DATA_TIMEOUT_VAL;
   state = STANDBY_PHASE;
   update_type = NULL;
   data_mcast_addr = String();
@@ -266,10 +267,6 @@ void on_cmd_mcast_packet(){
 
   String cmd_message = parse_cmd();
   String target_id = parse_cmd();
-
-  Serial.print(cmd_message);
-  Serial.print(" received with target id ");
-  Serial.println(target_id);
 
   if(update_type != NULL){
     // Return early if not for me
@@ -549,21 +546,20 @@ bool init_to_gateway(int tcp_port){
 // Handles some Phases of the OTA (Verification & Update)
 void handle_ota_service(){
   // Get rid of this first, cause it's making problems
-  // if(state == TRANSFER_PHASE){
-  //   if(data_timeout > 0){
-  //     // Checks whether the Data Mcast Listener timed out
-  //     delay(100);
-  //     data_timeout--;
-  //   } else {
-  //     // Considers the gateway already in VERIFICATION_PHASE
-  //     // Tells them we timedout
-  //     String reply_msg[2] = {CMD_DATA_TIMEOUT, device_id};
-  //     reply_cmd(reply_msg, 2);
+  if(state == TRANSFER_PHASE){
+    // Checks whether the Data Mcast Listener timed out
+    if(data_timeout > 0){
+      delay(10);
+      data_timeout--;
+    } else {
+      // Considers the gateway already in VERIFICATION_PHASE
+      // Tells them we timedout
+      String reply_msg[2] = {CMD_DATA_TIMEOUT, device_id};
+      reply_cmd(reply_msg, 2);
 
-  //     data_timeout = DATA_TIMEOUT_VAL;
-  //   }
-  // } else 
-  if(state == VERIFICATION_PHASE){
+      data_timeout = DATA_TIMEOUT_VAL;
+    }
+  } else if(state == VERIFICATION_PHASE){
     Serial.println("Verifying Checksum...");
     md5_checksum->calculate();
     bool checksum_mismatch = !md5_checksum->toString().equals(server_checksum);

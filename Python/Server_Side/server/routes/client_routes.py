@@ -111,6 +111,9 @@ def ota_device():
         if target_device is None:
             status_response['status'] = constants.strings.STATUS_CODE_MISSING_DEVICE
             status_response['message'] = 'No Device with that ID exists!'
+        elif target_device['type'] is None:
+            status_response['status'] = constants.string.STATUS_CODE_UNINITIALIZED
+            status_response['message'] = 'Device has not been initialized!'
         else:
             status_response = uftp_handlers.distribute_updated_code(target_device['id'])
 
@@ -139,6 +142,9 @@ def ota_cluster():
         if target_cluster is None:
             status_response['status'] = constants.strings.STATUS_CODE_MISSING_CLUSTER
             status_response['message'] = 'No Cluster with that ID exists!'
+        elif target_cluster['type'] is None:
+            status_response['status'] = constants.string.STATUS_CODE_UNINITIALIZED
+            status_response['message'] = 'Cluster has not been initialized!'
         else:
             status_response = uftp_handlers.distribute_updated_code(
                 target_cluster['id'], is_cluster=True)

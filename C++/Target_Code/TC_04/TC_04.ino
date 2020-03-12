@@ -1,7 +1,7 @@
 #define RED_LED_PIN D1
 #define GREEN_LED_PIN D2
 
-//Blink Green LED with a period of 2s
+//Blink Red LED with a period of 2s
 
 void setup() {
   // put your setup code here, to run once:
