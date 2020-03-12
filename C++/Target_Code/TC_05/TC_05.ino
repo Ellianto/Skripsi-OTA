@@ -1,6 +1,5 @@
-#define GREEN_LED_PIN D5
-#define RED_LED_PIN D2
-
+#define RED_LED_PIN D1
+#define GREEN_LED_PIN D2
 //Fancy Blinking
 
 void setup() {

@@ -22,3 +22,7 @@ CLUSTERS_FILE_PATH = CURR_DIR / 'clusters.json'
 
 DIR_LIST = [DEST_DIR, BACKUP_DIR]
 JSON_FILE_LIST = [DEVICES_FILE_PATH, CLUSTERS_FILE_PATH]
+FILE_EXTENSIONS = {
+    'ESP' : '.ino.nodemcu.bin',
+    'RPi' : '.zip'
+}

@@ -260,7 +260,7 @@ def init_uftp():
 
 def init_multicast():
     print('Initializing Multicast Socket...')
-
+    global cmd_mcast_socket
 
     rc = 0
     with constants.paths.CONF_FILE_PATH.open() as conf_file:
@@ -270,21 +270,24 @@ def init_multicast():
 
     try:
         cmd_mcast_socket = sock.socket(sock.AF_INET, sock.SOCK_DGRAM)
-        ip_addr = constants.network.AP_ADDRESS
-        cmd_mcast_socket.bind((ip_addr, int(cmd_mcast_port)))
+        cmd_mcast_socket.bind((constants.network.AP_ADDRESS, int(cmd_mcast_port)))
+        cmd_mcast_socket.settimeout(15.0)
+        # cmd_mcast_socket.bind(('', int(cmd_mcast_port)))
+
     except sock.error:
         print('Failed to create Multicast Socket!')
         rc = 1
 
 
-    try:
-        mreq = struct.pack('=4sL', sock.inet_aton(cmd_mcast_addr), sock.INADDR_ANY)
-        cmd_mcast_socket.setsockopt(sock.IPPROTO_IP, sock.IP_ADD_MEMBERSHIP, mreq)
-    except sock.error:
-        print('Failed to join Multicast Group!')
-        rc = 2
+    # try:
+    #     mreq = struct.pack('=4sL', sock.inet_aton(cmd_mcast_addr), sock.INADDR_ANY)
+    #     cmd_mcast_socket.setsockopt(sock.IPPROTO_IP, sock.IP_ADD_MEMBERSHIP, mreq)
+    # except sock.error:
+    #     print('Failed to join Multicast Group!')
+    #     rc = 2
 
-    cmd_mcast_socket.settimeout(10)
+    
+
     return rc
 
 
@@ -364,90 +367,90 @@ def generate_data_mcast_addr():
 
 
 def send_mcast_cmd(cmd_arr, dest_addr):
+    global cmd_mcast_socket
+
     cmd_mcast_socket.sendto(
-        (constants.network.CMD_MSG_SEPARATOR.join(cmd_arr) + '\n').encode(),
+        str.encode(constants.network.CMD_MSG_SEPARATOR.join(cmd_arr) + '\n'),
         dest_addr
     )
 
 
-def listen_for_reply(mcast_sock, buf_size=1024):
-    reply, addr = mcast_sock.recvfrom(buf_size)
-    print('Reply from ' + addr)
-    return [val.decode() for val in reply.split(constants.network.CMD_MSG_SEPARATOR)]
-
-
 def multicast_update(target_id, is_cluster=False):
+    print('Starting Multicast OTA Update...')
+
     #! **START PHASE**
     #! Get required params and infos
+    print("START PHASE")
     configuration = get_config()
 
     devices = get_devices()
     target_clients = [device['id'] for device in devices['data'] if device['id' if is_cluster is False else 'cluster'] == target_id]
+    device_type = next((device['type'] for device in devices['data'] if device['id'] in target_clients), None)
     abort_msg = [
         'a',
         str(target_id),
-        configuration['gateway_uid']
+        str(configuration['gateway_uid'])
     ]
 
     # So that the usage of this variable in the function
     # refers to the global variable that has been initialized
     global cmd_mcast_socket
+    global data_mcast_socket
 
     cmd_mcast_addr = str(configuration['end_device_multicast_addr']).split(':')
     cmd_mcast_group = (cmd_mcast_addr[0], int(cmd_mcast_addr[1]))
     data_mcast_group = generate_data_mcast_addr()
 
     # TODO: Check if the path is correct when testing
-    target_file_path = constants.paths.DEST_DIR / ('clusters' if is_cluster is True else 'devices') / target_id /  (target_id + '.zip')
+    target_file_path = constants.paths.DEST_DIR / ('clusters' if is_cluster is True else 'devices') / target_id /  (target_id + constants.paths.FILE_EXTENSIONS[device_type])
+
     target_file = target_file_path.open(mode='rb')
     checksum = md5_checksum(target_file_path)
 
     #! **STANDBY PHASE**
     #! Send target cluster/device ID and additional info
+    print("STANDBY PHASE")
+
     channel_setup_msg = [
         'c' if is_cluster is True else 'd',
         str(target_id), 
         get_file_size(target_file), 
-        data_mcast_group[0],
-        data_mcast_group[1]
+        str(data_mcast_group[0]),
+        str(data_mcast_group[1])
     ]
 
-    send_mcast_cmd(channel_setup_msg, cmd_mcast_addr)
+    send_mcast_cmd(channel_setup_msg, cmd_mcast_group)
 
     #! Poll for client response
     # Expected message format : [OK or NO or FA]|[device_id]|[possible_buffer_size]\n
     clients_ok = False
     clients_replied = []
-    buffer_limit = 1460
+    buffer_limit = 1470 # Try and experiment to adjust this value to the optimum
+    # 1470 can still do without getting fragmented
+    # 1460 is the MTU value
+    # 1024 can do
+    print(target_clients)
 
-    while True:
+    while clients_ok is not True:
         try:
-            reply_messages = listen_for_reply(cmd_mcast_socket, buf_size=configuration['buffer_size'])
+            reply, src_ip = cmd_mcast_socket.recvfrom(buffer_limit)
+            reply_messages = [val.strip() for val in reply.decode().split(constants.network.CMD_MSG_SEPARATOR)]
 
-            print('Received ' + reply_messages[0] + ' from ' + reply_messages[1])
+            print('Received {} from device {} ({})'.format(reply_messages[0], reply_messages[1], src_ip[0]))
 
             if reply_messages[0] == 'OK' and reply_messages[1] in target_clients:
                 clients_replied.append(reply_messages[1])
-
-                client_buffer_size = reply_messages[2]
-
-                over_limit = buffer_limit > client_buffer_size
-
-                if over_limit is True:
-                    buffer_limit = client_buffer_size
-            elif clients_replied[0] in ['NO', 'FA']:
+                clients_ok = set(target_clients) == set(clients_replied)
+                buffer_limit = min(int(reply_messages[2]), buffer_limit)
+            elif reply_messages[0] in ['NO', 'FA']:
                 break
         except sock.timeout:
             print('Some clients did not respond!')
             break
         except OSError:
             print('Specified Buffer Size is not enough!')
-            send_mcast_cmd(abort_msg, cmd_mcast_addr)
+            send_mcast_cmd(abort_msg, cmd_mcast_group)
             break
-        else:
-            if set(target_clients) == set(clients_replied):
-                clients_ok = True
-                break
             
     #! If not all clients are OK, send abort
     if clients_ok is not True:
@@ -459,77 +462,79 @@ def multicast_update(target_id, is_cluster=False):
     #! Create Data Mcast Socket
     try:
         data_mcast_socket = sock.socket(sock.AF_INET, sock.SOCK_DGRAM)
+        # TODO: Try binding it to specify the NIC to send the Mcast data to
+        data_mcast_socket.bind((constants.network.AP_ADDRESS, int(data_mcast_group[1])))
     except sock.error:
         print('Failed to create Data Multicast Socket!')
-        send_mcast_cmd(abort_msg, cmd_mcast_addr)
+        send_mcast_cmd(abort_msg, cmd_mcast_group)
         return 2
 
     #! **TRANSFER PHASE**
     #! Tell clients to start listening
+    print("TRANSFER PHASE")
     begin_transfer_msg = [
         't',
         str(target_id),
         str(checksum),
-        buffer_limit,
+        str(buffer_limit),
     ]
 
-    time.sleep(0.3)
-    send_mcast_cmd(begin_transfer_msg, cmd_mcast_addr)
-    time.sleep(0.7)
+    send_mcast_cmd(begin_transfer_msg, cmd_mcast_group)
+    time.sleep(1)
 
     #! Send chunks of file to client
-    for piece in read_in_chunks(target_file):
+    for piece in read_in_chunks(target_file, chunk_size=buffer_limit):
         data_mcast_socket.sendto(piece, data_mcast_group)
-        time.sleep(0.03)
+        time.sleep(0.08)
 
     #! Close Data Socket
     data_mcast_socket.close()
+    time.sleep(0.5)
 
     #! **VERIFICATION PHASE**
     #! Poll for client response
     # Expected message format : [ACK or NEQ or DTO]|[device_id]\n
+    print("VERIFICATION PHASE")
     clients_acked = []
     transfer_ok = False
 
-    while True:
+    while transfer_ok is not True:
         try:
-            reply_messages = listen_for_reply(
-                cmd_mcast_socket, buf_size=configuration['buffer_size'])
+            reply, src_ip = cmd_mcast_socket.recvfrom(buffer_limit)
+            reply_messages = [val.strip() for val in reply.decode().split(constants.network.CMD_MSG_SEPARATOR)]
 
-            print('Received ' + reply_messages[0] + ' from ' + reply_messages[1])
+            print('Received {} from device {} {}'.format(reply_messages[0], reply_messages[1], src_ip))
 
             if reply_messages[0] == 'ACK' and reply_messages[1] in clients_replied:
                 clients_acked.append(reply_messages[1])
-            elif clients_acked[0] in ['NEQ', 'DTO']:
+                transfer_ok = set(clients_acked) == set(clients_replied)
+            elif reply_messages[0] in ['NEQ', 'DTO']:
                 break
         except sock.timeout:
             print('Some clients failed to reply!')
             break
         except OSError:
             print('Specified Buffer size is not enough!')
-            send_mcast_cmd(abort_msg, cmd_mcast_addr)
+            send_mcast_cmd(abort_msg, cmd_mcast_group)
             break
-        else:
-            if set(clients_acked) == set(clients_replied):
-                transfer_ok = True
-                break
 
     if transfer_ok is not True:
-        send_mcast_cmd(abort_msg, cmd_mcast_addr)
+        send_mcast_cmd(abort_msg, cmd_mcast_group)
         return 2
 
     #! **END PHASE**
     #! Tell them to replace the old code or to actually do the update
+    print("END PHASE")
     apply_update_msg = [
         's',
         str(target_id),
-        configuration['gateway_uid']
+        str(configuration['gateway_uid'])
     ]
 
-    send_mcast_cmd(apply_update_msg, cmd_mcast_addr)
+    send_mcast_cmd(apply_update_msg, cmd_mcast_group)
     time.sleep(3)
     #! To force stop any "hanging clients"
-    send_mcast_cmd(abort_msg, cmd_mcast_addr)
+    # send_mcast_cmd(abort_msg, cmd_mcast_group)
     return 0
 
 
@@ -607,16 +612,16 @@ if __name__ == '__main__':
 
     finally:
         if cmd_mcast_socket is not None:
-            configuration = get_config()
-            [cmd_mcast_addr, cmd_mcast_port] = str(configuration['end_device_multicast_addr']).split(':')
-
-            mreq = struct.pack('=4sL', sock.inet_aton(cmd_mcast_addr), sock.INADDR_ANY)
-            cmd_mcast_socket.setsockopt(sock.IPPROTO_IP, sock.IP_DROP_MEMBERSHIP, mreq)
-
             cmd_mcast_socket.close()
 
         if mqtt_client is not None:
             mqtt_client.loop_stop()
             mqtt_client.disconnect()
+
+        proc_name = 'uftpd'
+        uftpd_instance = next((proc for proc in psutil.process_iter() if proc.name() == proc_name), None)
+
+        if uftpd_instance is not None:
+            uftpd_instance.terminate()
 
     sys.exit(rc)

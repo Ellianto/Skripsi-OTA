@@ -33,8 +33,8 @@ char update_type =  NULL;
 // Can probably make this a class/struct
 unsigned int buffer_size = 0;
 unsigned int data_timeout = 0;
-String data_mcast_addr;
 char cmd_msg_separator = '|'; // The default
+String data_mcast_addr;
 
 //States for UDP Multicast Listener
 #define START_PHASE 0
@@ -61,12 +61,11 @@ String server_checksum;
 #define CMD_CHECKSUM_MISMATCH "NEQ"
 #define CMD_DATA_TIMEOUT "DTO"
 
-#define DATA_TIMEOUT_VAL 20 // 20 times 10ms check
+#define DATA_TIMEOUT_VAL 50 // 50 times 10ms check
 
 // User #define-s
-#define GREEN_LED_PIN D5
-#define RED_LED_PIN D2
-
+#define RED_LED_PIN D1
+#define GREEN_LED_PIN D2
 
 // Only a wrapper for ease of access
 // Will be run in the setup() section
@@ -78,6 +77,7 @@ void user_setup(){
 // Only a wrapper for ease of access
 // Will be run in the loop() section
 void user_loop(){
+  // put your main code here, to run repeatedly:
   digitalWrite(GREEN_LED_PIN, HIGH);
   digitalWrite(RED_LED_PIN, HIGH);
   delay(1000);
@@ -192,6 +192,7 @@ void discard_data_context(){
 }
 
 // Based on ArduinoOTA's readStringUntil
+// Reads until the specified cmd_msg_separator, or \0 or \n character
 String parse_cmd(){
   String holder;
   int val;
@@ -238,6 +239,7 @@ void cleanup_states(){
   update_type = NULL;
   data_mcast_addr = String();
   delete md5_checksum;
+  ESP.reset();
 }
 
 // Receive UDP datagram from Data Multicast Address
@@ -261,7 +263,6 @@ void on_recv_data(){
   }
 
   if (Update.isFinished()){
-    discard_data_context();
     state = VERIFICATION_PHASE;
   }
 }
@@ -572,7 +573,6 @@ void handle_ota_service(){
   //     data_timeout = DATA_TIMEOUT_VAL;
   //   }
   // } else 
-  
   if(state == VERIFICATION_PHASE){
     Serial.println("Verifying Checksum...");
     md5_checksum->calculate();

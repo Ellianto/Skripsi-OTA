@@ -9,7 +9,6 @@ SERVER_CONF_VALIDATOR = Schema({
     Optional('end_device_multicast_addr', default='230.6.6.1:7777'): All(Coerce(str), Match(r'^(22[4-9]|230)(\.([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])){3}:\d{3,4}$')),
     Optional('max_log_size', default='2'):  All(Coerce(str), Match(r'^\d{1,2}$')),
     Optional('max_log_count', default='5'): All(Coerce(str), Match(r'^\d{1,2}$')),
-    Optional('buffer_size', default=1024): All(Coerce(int), Range(min=64, max=1460))
 })
 
 END_DEVICE_CONF_VALIDATOR = Schema({

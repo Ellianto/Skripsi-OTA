@@ -1,6 +1,5 @@
-#define GREEN_LED_PIN D5
-#define RED_LED_PIN D2
-
+#define RED_LED_PIN D1
+#define GREEN_LED_PIN D2
 //Blink LEDs alternating with a period of 2s
 
 void setup() {
