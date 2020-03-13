@@ -10,7 +10,7 @@
                 "0xE66E2011"
             ],
             "id": "target_cluster_x01",
-            "type": null
+            "type": "ESP"
         }
     ]
 }

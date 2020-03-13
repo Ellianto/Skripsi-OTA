@@ -60,7 +60,8 @@ def initialize_params(target_id, is_cluster=False):
         else:
             init_obj['status_code'] = constants.strings.STATUS_CODE_SUCCESS
             init_obj['message'] = 'Parameter Initialization Successful!'
-            target_file = target_dir / (target_id + constants.paths.FILE_EXTENSIONS[target_device['type']])
+            target_type = target_device['type'] if is_cluster is False else target_cluster['type']
+            target_file = target_dir / (target_id + constants.paths.FILE_EXTENSIONS[target_type])
 
             if target_file.exists() is not True:
                 target_file = None

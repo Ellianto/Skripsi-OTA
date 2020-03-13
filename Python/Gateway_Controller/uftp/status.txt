@@ -1,0 +1,10 @@
+CONNECT;2020/03/12-08:36:18;ABCDABCD;3327C076;192.168.1.9;skripsi_server
+RESULT;2020/03/12-08:36:21;ABCDABCD;3327C076;/home/pi/gateway_code/main_data///devices/target_device_x02/target_device_x02.ino.nodemcu.bin;325KB;copied
+CONNECT;2020/03/12-08:37:56;ABCDABCD;4D1E6FF4;192.168.1.9;skripsi_server
+RESULT;2020/03/12-08:37:56;ABCDABCD;4D1E6FF4;/home/pi/gateway_code/main_data///devices/target_device_x02/target_device_x02.ino.nodemcu.bin;325KB;skipped
+CONNECT;2020/03/12-08:46:41;ABCDABCD;0200E268;192.168.1.9;skripsi_server
+RESULT;2020/03/12-08:46:41;ABCDABCD;0200E268;/home/pi/gateway_code/main_data///devices/target_device_x02/target_device_x02.ino.nodemcu.bin;325KB;skipped
+CONNECT;2020/03/12-09:50:52;ABCDABCD;BF9A2EB2;192.168.1.9;skripsi_server
+RESULT;2020/03/12-09:50:55;ABCDABCD;BF9A2EB2;/home/pi/gateway_code/main_data///clusters/target_cluster_x01/target_cluster_x01.ino.nodemcu.bin;325KB;copied
+CONNECT;2020/03/12-10:18:55;ABCDABCD;7350D2EA;192.168.1.9;skripsi_server
+RESULT;2020/03/12-10:18:58;ABCDABCD;7350D2EA;/home/pi/gateway_code/main_data///clusters/target_cluster_x01/target_cluster_x01.ino.nodemcu.bin;325KB;overwritten

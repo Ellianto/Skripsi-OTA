@@ -117,6 +117,10 @@ class MyTCPHandler(socketserver.StreamRequestHandler):
 
             if init_success is True:
                 init_device_to_file(device_data)
+
+                # Don't forget to subscribe to required topic
+                if device_data['cluster'] is not None:
+                    mqtt_client.subscribe('ota/cluster/' + device_data['cluster'], qos=2)
                 
                 # Reply Back to client
                 [cmd_mcast_addr, cmd_mcast_port] = str(
@@ -294,6 +298,8 @@ def init_multicast():
 def init_mqtt():
     print('Initializing MQTT Client...')
     rc = False
+    global mqtt_client
+
     try:
         configuration = get_config()
         mqtt_client = mqtt.Client(configuration['gateway_uid'])

@@ -23,6 +23,7 @@ def generate_gateway_uid():
 
     return random_hexa_uid
 
+
 def register_to_gateway(device_data):
     success = False
 
@@ -50,6 +51,7 @@ def register_to_gateway(device_data):
             if device_data['gateway'] not in clusters['data'][cluster_index]['gateways']:
                 clusters['data'][cluster_index]['gateways'].append(
                     device_data['gateway'])
+                clusters['data'][cluster_index]['type'] = device_data['type']
                 file_io.write_clusters(clusters)
         else:
             if device_data['id'] not in gateways['data'][gateway_index]['device']:

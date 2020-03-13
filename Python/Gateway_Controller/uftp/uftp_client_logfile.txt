@@ -1,0 +1,101 @@
+2020/03/12 08:35:27.350599: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 08:35:27.351591: Loaded 512 bit RSA key with fingerprint 86:19:D4:9A:D7:BF:EC:1E:73:4E:B1:1A:17:24:FB:19:E2:7C:66:8E
+2020/03/12 08:36:18.564951: [3327C076/00:0]: Received request from ABCDABCD at skripsi_server (192.168.1.9)
+2020/03/12 08:36:18.565185: [3327C076/00:0]: Using private multicast address 230.5.5.142
+2020/03/12 08:36:18.565733: [3327C076/00:0]: REGISTER sent
+2020/03/12 08:36:18.616216: [3327C076/00:0001]: Name of file to receive: /home/pi/gateway_code/main_data///devices/target_device_x02/target_device_x02.ino.nodemcu.bin
+2020/03/12 08:36:18.616474: [3327C076/00:0001]: Bytes: 333088, Blocks: 257, Sections: 1
+2020/03/12 08:36:18.617012: [3327C076/00:0001]: copying new file
+2020/03/12 08:36:18.617486: [3327C076/00:0001]: FILEINFO_ACK sent
+2020/03/12 08:36:21.279408: [3327C076/00:0001]: Got DONE message for section 0
+2020/03/12 08:36:21.284164: [3327C076/00:0001]: File transfer complete
+2020/03/12 08:36:21.284720: [3327C076/00:0001]: COMPLETE sent
+2020/03/12 08:36:21.284961: [3327C076/00:0001]: starting file close
+2020/03/12 08:36:21.285094: [3327C076/00:0001]: done file close
+2020/03/12 08:36:21.301128: [3327C076/00:0]: Got DONE message for group
+2020/03/12 08:36:21.301273: [3327C076/00:0]: Group complete
+2020/03/12 08:36:21.301509: [3327C076/00:0]: COMPLETE sent
+2020/03/12 08:36:21.311531: [3327C076/00:0]: Group file transfer confirmed
+2020/03/12 08:37:56.647036: [4D1E6FF4/00:0]: Received request from ABCDABCD at skripsi_server (192.168.1.9)
+2020/03/12 08:37:56.647260: [4D1E6FF4/00:0]: Using private multicast address 230.5.5.30
+2020/03/12 08:37:56.647676: [4D1E6FF4/00:0]: REGISTER sent
+2020/03/12 08:37:56.702546: [4D1E6FF4/00:0001]: Name of file to receive: /home/pi/gateway_code/main_data///devices/target_device_x02/target_device_x02.ino.nodemcu.bin
+2020/03/12 08:37:56.702741: [4D1E6FF4/00:0001]: Bytes: 333088, Blocks: 257, Sections: 1
+2020/03/12 08:37:56.702969: [4D1E6FF4/00:0001]: skipping file, in sync
+2020/03/12 08:37:56.703183: [4D1E6FF4/00:0001]: COMPLETE sent
+2020/03/12 08:37:56.713112: [4D1E6FF4/00:0]: Got DONE message for group
+2020/03/12 08:37:56.713252: [4D1E6FF4/00:0]: Group complete
+2020/03/12 08:37:56.713438: [4D1E6FF4/00:0]: COMPLETE sent
+2020/03/12 08:37:56.724535: [4D1E6FF4/00:0]: Group file transfer confirmed
+2020/03/12 08:38:16.358175: Exiting on signal 15
+2020/03/12 08:45:06.514429: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 08:45:06.515246: Loaded 512 bit RSA key with fingerprint D0:9E:FE:1C:B9:F1:47:70:3B:3C:E1:DB:3E:32:2C:B1:C1:B7:C5:96
+2020/03/12 08:45:20.049370: Exiting on signal 15
+2020/03/12 08:45:23.025646: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 08:45:23.026274: Loaded 512 bit RSA key with fingerprint 05:E2:3E:C7:ED:23:27:B7:AE:E7:56:F2:62:FF:16:E5:21:A0:72:77
+2020/03/12 08:46:14.833664: Exiting on signal 15
+2020/03/12 08:46:18.588640: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 08:46:18.589357: Loaded 512 bit RSA key with fingerprint 57:CF:4C:A7:1A:3E:CC:31:A5:15:EF:FB:80:FC:ED:BE:42:1A:27:26
+2020/03/12 08:46:41.772365: [0200E268/00:0]: Received request from ABCDABCD at skripsi_server (192.168.1.9)
+2020/03/12 08:46:41.772605: [0200E268/00:0]: Using private multicast address 230.5.5.195
+2020/03/12 08:46:41.773085: [0200E268/00:0]: REGISTER sent
+2020/03/12 08:46:41.822062: [0200E268/00:0001]: Name of file to receive: /home/pi/gateway_code/main_data///devices/target_device_x02/target_device_x02.ino.nodemcu.bin
+2020/03/12 08:46:41.822310: [0200E268/00:0001]: Bytes: 333088, Blocks: 257, Sections: 1
+2020/03/12 08:46:41.822598: [0200E268/00:0001]: skipping file, in sync
+2020/03/12 08:46:41.822821: [0200E268/00:0001]: COMPLETE sent
+2020/03/12 08:46:41.833399: [0200E268/00:0]: Got DONE message for group
+2020/03/12 08:46:41.833532: [0200E268/00:0]: Group complete
+2020/03/12 08:46:41.833714: [0200E268/00:0]: COMPLETE sent
+2020/03/12 08:46:41.844079: [0200E268/00:0]: Group file transfer confirmed
+2020/03/12 08:47:38.423238: Exiting on signal 15
+2020/03/12 09:33:57.588605: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 09:33:57.593399: Loaded 512 bit RSA key with fingerprint BD:31:C6:60:D4:84:EA:22:06:EF:66:5D:D6:80:87:29:CA:FA:F8:C2
+2020/03/12 09:35:43.641837: Exiting on signal 15
+2020/03/12 09:37:11.983400: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 09:37:11.984092: Loaded 512 bit RSA key with fingerprint A3:4F:B5:7B:D8:83:F5:55:84:94:36:85:20:19:A0:B1:1C:D5:12:30
+2020/03/12 09:40:23.728851: Exiting on signal 15
+2020/03/12 09:41:57.257560: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 09:41:57.258221: Loaded 512 bit RSA key with fingerprint D1:11:BC:6A:66:4D:7F:2B:A9:8A:8A:58:E9:1A:3D:DD:58:2F:7E:7D
+2020/03/12 09:44:09.933024: Exiting on signal 15
+2020/03/12 09:45:45.157242: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 09:45:45.157949: Loaded 512 bit RSA key with fingerprint 88:D6:7A:E9:DB:61:53:62:4A:24:37:FD:5F:AF:EC:09:D4:0B:57:DC
+2020/03/12 09:48:09.521035: Exiting on signal 15
+2020/03/12 09:50:12.786133: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 09:50:12.786864: Loaded 512 bit RSA key with fingerprint 9E:DB:7C:F7:2C:15:45:05:D2:AC:61:71:62:9B:4D:FF:F6:D8:7D:0C
+2020/03/12 09:50:52.554890: [BF9A2EB2/00:0]: Received request from ABCDABCD at skripsi_server (192.168.1.9)
+2020/03/12 09:50:52.555118: [BF9A2EB2/00:0]: Using private multicast address 230.5.5.211
+2020/03/12 09:50:52.656019: [BF9A2EB2/00:0]: REGISTER sent
+2020/03/12 09:50:52.701783: [BF9A2EB2/00:0001]: Name of file to receive: /home/pi/gateway_code/main_data///clusters/target_cluster_x01/target_cluster_x01.ino.nodemcu.bin
+2020/03/12 09:50:52.702015: [BF9A2EB2/00:0001]: Bytes: 333136, Blocks: 257, Sections: 1
+2020/03/12 09:50:52.702686: [BF9A2EB2/00:0001]: copying new file
+2020/03/12 09:50:52.703139: [BF9A2EB2/00:0001]: FILEINFO_ACK sent
+2020/03/12 09:50:55.364675: [BF9A2EB2/00:0001]: Got DONE message for section 0
+2020/03/12 09:50:55.369397: [BF9A2EB2/00:0001]: File transfer complete
+2020/03/12 09:50:55.369852: [BF9A2EB2/00:0001]: COMPLETE sent
+2020/03/12 09:50:55.370101: [BF9A2EB2/00:0001]: starting file close
+2020/03/12 09:50:55.370235: [BF9A2EB2/00:0001]: done file close
+2020/03/12 09:50:55.385056: [BF9A2EB2/00:0]: Got DONE message for group
+2020/03/12 09:50:55.385193: [BF9A2EB2/00:0]: Group complete
+2020/03/12 09:50:55.385396: [BF9A2EB2/00:0]: COMPLETE sent
+2020/03/12 09:50:55.395501: [BF9A2EB2/00:0]: Group file transfer confirmed
+2020/03/12 09:51:52.224555: Exiting on signal 15
+2020/03/12 10:18:13.650845: UFTP version 4.10  Copyright (C) 2001-2019  Dennis A. Bush
+2020/03/12 10:18:13.651543: Loaded 512 bit RSA key with fingerprint CD:62:3E:9F:6F:18:4B:EB:F6:D1:17:C8:C8:6D:17:BD:65:48:C8:A7
+2020/03/12 10:18:55.525672: [7350D2EA/00:0]: Received request from ABCDABCD at skripsi_server (192.168.1.9)
+2020/03/12 10:18:55.525913: [7350D2EA/00:0]: Using private multicast address 230.5.5.33
+2020/03/12 10:18:55.526403: [7350D2EA/00:0]: REGISTER sent
+2020/03/12 10:18:55.575734: [7350D2EA/00:0001]: Name of file to receive: /home/pi/gateway_code/main_data///clusters/target_cluster_x01/target_cluster_x01.ino.nodemcu.bin
+2020/03/12 10:18:55.575961: [7350D2EA/00:0001]: Bytes: 332944, Blocks: 257, Sections: 1
+2020/03/12 10:18:55.576253: [7350D2EA/00:0001]: overwriting out of sync file
+2020/03/12 10:18:55.576736: [7350D2EA/00:0001]: FILEINFO_ACK sent
+2020/03/12 10:18:58.238747: [7350D2EA/00:0001]: Got DONE message for section 0
+2020/03/12 10:18:58.243404: [7350D2EA/00:0001]: File transfer complete
+2020/03/12 10:18:58.243855: [7350D2EA/00:0001]: COMPLETE sent
+2020/03/12 10:18:58.244113: [7350D2EA/00:0001]: starting file close
+2020/03/12 10:18:58.244249: [7350D2EA/00:0001]: done file close
+2020/03/12 10:18:58.245865: [7350D2EA/00:0001]: Backed up existing file to /home/pi/gateway_code/backup_data/20200312/101855//home/pi/gateway_code/main_data///clusters/target_cluster_x01/target_cluster_x01.ino.nodemcu.bin
+2020/03/12 10:18:58.260359: [7350D2EA/00:0]: Got DONE message for group
+2020/03/12 10:18:58.260572: [7350D2EA/00:0]: Group complete
+2020/03/12 10:18:58.260812: [7350D2EA/00:0]: COMPLETE sent
+2020/03/12 10:18:58.270992: [7350D2EA/00:0]: Group file transfer confirmed
+2020/03/12 10:20:27.731301: Exiting on signal 15

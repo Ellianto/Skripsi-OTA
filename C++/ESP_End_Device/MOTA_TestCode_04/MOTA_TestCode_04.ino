@@ -163,7 +163,6 @@ bool connect_to_wifi(String ssid, String passwd){
 // Clean up function for data_udp_context
 // Called when successfully received all data
 // Or if received abort command
-//TODO: Error -6 leaving IGMP Group, check it
 void discard_data_context(){
   // Leave the IGMP group
   ip_addr* mcast_addr = new ip_addr;
@@ -231,14 +230,14 @@ void reply_cmd(String msg[], int arr_length){
 // Cleanup and reset globals
 // Called on abort command, or when all is complete
 void cleanup_states(){
-  Update.end();
-
   discard_data_context();
   data_timeout = DATA_TIMEOUT_VAL;
   state = STANDBY_PHASE;
   update_type = NULL;
   data_mcast_addr = String();
   delete md5_checksum;
+
+  Serial.println("Resetting...");
   ESP.reset();
 }
 
@@ -305,7 +304,6 @@ void on_cmd_mcast_packet(){
       return;
     }
 
-    Serial.println("Hey");
     // If pass all the above checks
     // cmd_message should contain update type [d = device, c = cluster]
     update_type = cmd_message[0];
@@ -342,7 +340,6 @@ void on_cmd_mcast_packet(){
     set_mcast_listener("data", data_mcast_addr, data_mcast_port);
 
     String possible_buffer = String(UDP_TX_PACKET_MAX_SIZE);
-    // String possible_buffer = String((ESP.getFreeHeap() > (2 * FLASH_SECTOR_SIZE)) ? FLASH_SECTOR_SIZE : 256);
 
     // Replies with 3 part message if all is good
     // The third part specifies buffer size that this device can handle
@@ -366,9 +363,6 @@ void on_cmd_mcast_packet(){
 
     // Use this buffer_size for receiving data
     buffer_size = parse_cmd().toInt();
-    Serial.print("Ready to receive data (");
-    Serial.print(buffer_size);
-    Serial.println(" bytes)");
     data_timeout = DATA_TIMEOUT_VAL;
 
     // Does not change state here to make sure
@@ -554,21 +548,22 @@ bool init_to_gateway(int tcp_port){
 // An extension to set_mcast_listener function
 // Handles some Phases of the OTA (Verification & Update)
 void handle_ota_service(){
-  // Get rid of this first, cause it's making problems
-  if(state == TRANSFER_PHASE){
-    // Checks whether the Data Mcast Listener timed out
-    if(data_timeout > 0){
-      delay(10);
-      data_timeout--;
-    } else {
-      // Considers the gateway already in VERIFICATION_PHASE
-      // Tells them we timedout
-      String reply_msg[2] = {CMD_DATA_TIMEOUT, device_id};
-      reply_cmd(reply_msg, 2);
+  // Disabled DTO mechanism because not working properly
+  // if(state == TRANSFER_PHASE){
+  //   // Checks whether the Data Mcast Listener timed out
+  //   if(data_timeout > 0){
+  //     delay(10);
+  //     data_timeout--;
+  //   } else {
+  //     // Considers the gateway already in VERIFICATION_PHASE
+  //     // Tells them we timedout
+  //     String reply_msg[2] = {CMD_DATA_TIMEOUT, device_id};
+  //     reply_cmd(reply_msg, 2);
 
-      data_timeout = DATA_TIMEOUT_VAL;
-    }
-  } else if(state == VERIFICATION_PHASE){
+  //     data_timeout = DATA_TIMEOUT_VAL;
+  //   }
+  // } else 
+  if(state == VERIFICATION_PHASE){
     Serial.println("Verifying Checksum...");
     md5_checksum->calculate();
     bool checksum_mismatch = !md5_checksum->toString().equals(server_checksum);
@@ -580,6 +575,7 @@ void handle_ota_service(){
     state = END_PHASE;
   } else if(state == UPDATE_PHASE){
     Serial.println("Applying Updates...");
+    Update.end();
     cleanup_states();
   }
 }

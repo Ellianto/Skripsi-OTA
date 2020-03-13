@@ -4,9 +4,7 @@
             "cluster": [
                 "target_cluster_x01"
             ],
-            "device": [
-                "target_device_x01"
-            ],
+            "device": [],
             "id": "0xE66E2011"
         }
     ]
