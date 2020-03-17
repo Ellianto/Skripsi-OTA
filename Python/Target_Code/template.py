@@ -3,8 +3,8 @@ import time
 
 DEBUG = True
 
-RED_LED_PIN = 10
-GREEN_LED_PIN = 13
+GREEN_LED_PIN = 11
+RED_LED_PIN = 12
 
 # Used for pin setups
 # Array of tuples (pin_number, GPIO.OUT or IN)
@@ -15,7 +15,7 @@ output_pins = [
 ]
 
 def init():
-    if debug is True:
+    if DEBUG is True:
         # The hello world for GPIOs
         print(GPIO.RPI_INFO)
 
@@ -32,14 +32,15 @@ def init():
 
 
 try:
+    init()
     while True:
         # Change values here
         GPIO.output(RED_LED_PIN, GPIO.HIGH)
         GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
-        time.sleep(1000)
+        time.sleep(1)
         GPIO.output(RED_LED_PIN, GPIO.LOW)
         GPIO.output(GREEN_LED_PIN, GPIO.LOW)
-        time.sleep(1000)
+        time.sleep(1)
 
 finally:
     # Cleans up settings after finished running

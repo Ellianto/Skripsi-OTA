@@ -23,6 +23,12 @@
             "gateway": null,
             "id": "target_device_x04",
             "type": null
+        },
+        {
+            "cluster": null,
+            "gateway": "0x8B4F6E16",
+            "id": "target_device_y01",
+            "type": "RPi"
         }
     ]
 }

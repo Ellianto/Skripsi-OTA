@@ -5,6 +5,7 @@ import struct
 import sys
 import time
 import zipfile
+import netifaces as ni
 
 from pathlib import Path
 from shutil import rmtree as recursive_rmdir
@@ -85,7 +86,7 @@ def run_code():
 def create_multicast_socket(target_address, bind_port):
     try:
         mcast_sock = sock.socket(sock.AF_INET, sock.SOCK_DGRAM)
-        mcast_sock.bind(('', bind_port))
+        mcast_sock.bind(('', int(bind_port)))
     except sock.error:
         print('Failed to create Multicast Socket!')
         sys.exit(constants.exit_status.SOCK_MCAST_CREATE_FAIL)
@@ -116,7 +117,6 @@ def check_free_space(file_size):
 
 
 def receive_multicast_data(mcast_socket, file_size, buf_size=1024):
-    # TODO: If timedout while receiving data, send abort message
     with constants.paths.TEMP_DATA_FILE.open(mode='wb') as file:
         total = 0
 
@@ -129,7 +129,7 @@ def receive_multicast_data(mcast_socket, file_size, buf_size=1024):
 
 
 def apply_update(target_pid):
-        # Empty the TEMP_DIR
+    # Empty the TEMP_DIR
     recursive_rmdir(str(constants.paths.TEMP_DIR))
 
     # Extract files to tempdir
@@ -140,13 +140,12 @@ def apply_update(target_pid):
     recursive_rmdir(str(constants.paths.CODE_DIR))
     replace_code()
     return run_code()
-    
+
 
 def should_listen(target_id, device_info, is_cluster=False):
     return device_info['id' if is_cluster is False else 'cluster'] == target_id
 
 
-# TODO: Match these with changes in the Gateway side and ESP side
 def handle_ota_update(gateway_params, device_info):
     #! **START PHASE**
     # Initial Run
@@ -159,10 +158,11 @@ def handle_ota_update(gateway_params, device_info):
         while True:
             try:
                 #! **STANDBY PHASE**
-                #! Standby for gateway instructions 
+                #! Standby for gateway instructions
                 # Expected message format : [c or d]|[target_id]|[file_size]|[data_mcast_addr]|[data_mcast_port]\n
+                print('STANDBY PHASE')
                 cmd_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                        separator=gateway_params['message_separator'])
+                                                        separator=gateway_params['msg_separator'])
 
                 #! Ignore if not session initialization message
                 if cmd_messages[0] not in ['c', 'd']:
@@ -170,7 +170,7 @@ def handle_ota_update(gateway_params, device_info):
 
                 if should_listen(cmd_messages[1], device_info, cmd_messages[0]=='c') is not True:
                     continue
-                
+
                 file_size = int(cmd_messages[2])
                 enough_free_space = check_free_space(file_size)
 
@@ -180,16 +180,16 @@ def handle_ota_update(gateway_params, device_info):
                     msg_array = [
                         constants.cmd_code.OK,
                         device_info['id'],
-                        gateway_params['buffer_size']
+                        str(1460)
                     ]
                 else:
                     msg_array = [
                         constants.cmd_code.INSUFFICIENT_DISK,
                         device_info['id']
                     ]
-                    
+
                 #! Reply about my free size (enough or not enough)
-                reply_message = gateway_params['message_separator'].join(msg_array)
+                reply_message = gateway_params['msg_separator'].join(msg_array)
                 reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
 
                 if enough_free_space is not True:
@@ -207,15 +207,16 @@ def handle_ota_update(gateway_params, device_info):
                 #! **TRANSFER PHASE**
                 #! Poll until transfer/abort command
                 # Expected message format : [t or a]|[target_id]|[file_checksum]|[buffer_size]\n
+                print('TRANSFER PHASE')
                 while True:
                     transfer_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                            separator=gateway_params['message_separator'])
+                                                                            separator=gateway_params['msg_separator'])
 
                     if should_listen(transfer_messages[1], device_info, cmd_messages[0] == 'c') is not True:
                         continue
 
                     listen_transfer = transfer_messages[0] != 'a'
-                    
+
                     if transfer_messages[0] in ['t', 'a']:
                         break
 
@@ -225,39 +226,20 @@ def handle_ota_update(gateway_params, device_info):
 
                 #! Receive Files (if not abort)
                 data_buf_size = int(transfer_messages[3])
+                server_checksum = str(transfer_messages[2])
                 file_received_len = receive_multicast_data(data_multicast_socket, file_size, data_buf_size)
-                do_checksum = True
-
-                # TODO: Add reply + timeout here
 
                 #! **VERIFICATION PHASE**
                 #! Poll until checksum/abort command
-                # Expected message format : [h or a]|[target_id]|[file_checksum]\n
-                while True:
-                    checksum_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                            separator=gateway_params['message_separator'], 
-                                                                            timeout=3.0)
-
-                    if should_listen(checksum_messages[1], device_info, cmd_messages[0] == 'c') is not True:
-                        continue
-
-                    do_checksum = checksum_messages[0] != 'a'                    
-
-                    if checksum_messages[0] in ['h', 'a']:
-                        break
-
-                if do_checksum is not True:
-                    print('Aborting After Transfer Phase...')
+                print('VERIFICATION PHASE')
 
                 #! Match Checksum and reply (if not abort)
-                server_checksum = transfer_messages[1]
                 if server_checksum != md5_checksum(data_buf_size):
-                    ack_reply = [constants.cmd_code.CHECKSUM_MISMATCH,
-                                 device_info['device_id']]
+                    ack_reply = [constants.cmd_code.CHECKSUM_MISMATCH, device_info['id']]
                 else:
-                    ack_reply = [constants.cmd_code.ACK, device_info['device_id']]
+                    ack_reply = [constants.cmd_code.ACK, device_info['id']]
 
-                reply_message = gateway_params['message_separator'].join(ack_reply)
+                reply_message = gateway_params['msg_separator'].join(ack_reply)
                 reply_command_messages(global_multicast_socket, reply_message, gateway_addr)
 
                 start_update = True
@@ -265,10 +247,10 @@ def handle_ota_update(gateway_params, device_info):
                 #! **END PHASE**
                 #! Poll until startUpdate/abort command
                 # Expected message format : [s or a]|[target_id]\n
+                print('END PHASE')
                 while True:
                     start_messages, gateway_addr = listen_command_messages(global_multicast_socket,
-                                                                            separator=gateway_params['message_separator'],
-                                                                            timeout=5.0)
+                                                                            separator=gateway_params['msg_separator'])
 
                     if should_listen(start_messages[1], device_info, cmd_messages[0] == 'c') is not True:
                         continue
@@ -280,7 +262,7 @@ def handle_ota_update(gateway_params, device_info):
 
                 #! Apply update (if not abort)
                 if start_update is True:
-                    apply_update(proc.pid)
+                    proc = apply_update(proc.pid)
                 else:
                     print('Aborting Update Phase...')
             except sock.timeout:
@@ -305,7 +287,7 @@ def handle_ota_update(gateway_params, device_info):
                 sock.IPPROTO_IP, sock.IP_DROP_MEMBERSHIP, cmd_mreq)
 
             global_multicast_socket.close()
-    
+
 
 # End of Multicast Handling Section
 
@@ -313,7 +295,6 @@ def handle_ota_update(gateway_params, device_info):
 def main():
     # Reads config.json for device and cluster ID
     # This assumes the RPi is already connected to the Gateway Network
-    # TODO: Match with the ESP's flow if possible
     configuration = read_config()
 
     # Check existence appropriate script file
@@ -333,27 +314,46 @@ def main():
 
     # Send Initialization request to gateway address
     try:
-        # TODO: Interact with TCP Socket in gateway for runtime parameters
-        response = requests.post(configuration['gateway'] + configuration['init_api'], json=configuration['device'])
+        init_addr = (ni.gateways()['default'][ni.AF_INET][0], configuration['init_port'])
 
-        if response.raise_for_status() is None:
-            json_data = response.json()
-            # TODO: Validate JSON Response with Voluptuous
+        with sock.socket(sock.AF_INET, sock.SOCK_STREAM) as init_sock:
+            print(init_addr)
+            init_sock.connect(init_addr)
+            init_json = {
+                **configuration['device'],
+                'code': 'INIT'
+            }
 
-            if json_data['status'] == 'success':
-                handle_ota_update(response.json(), configuration['device'])
+            # Needs to be newline terminated
+            tcp_data = json.dumps(init_json).encode() + '\n'.encode()
+            print('Sending Serialized JSON')
+            print(tcp_data)
+
+            init_sock.sendall(tcp_data)
+
+            # Block until gateway responds
+            response, addr = init_sock.recvfrom(1024)
+
+            print('Received Response from ' + str(addr))
+            print(response)
+            response_json = json.loads(response)
+
+            if response_json['status'] == 'success':
+                print('Starting OTA Listener...')
+                handle_ota_update(response_json, configuration['device'])
             else:
-                print(json_data)
+                run_code()
+                print('Failed to Initialize OTA Service')
+                print('Still running user application')
                 sys.exit(constants.exit_status.GATEWAY_FAILURE)
-        else:
-            raise requests.HTTPError
-    except requests.HTTPError as err:
-        print(err)
-        sys.exit(constants.exit_status.HTTP_ERROR)
 
+    except OSError as err:
+        print(err)
+        print('Still running user application')
+        run_code()
+        sys.exit(constants.exit_status.HTTP_ERROR)
 
 if __name__ == '__main__':
     main()
     sys.exit(constants.exit_status.SUCCESS)
 
-# Test This
