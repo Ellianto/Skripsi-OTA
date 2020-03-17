@@ -1,18 +1,19 @@
 This TODO will explain the steps required to setup the Raspberry Pi as Gateway/Controller 
 ~tested with Raspberry Pi 3 Model B+ running Raspbian Buster 2020-02-13
 
-* Ensure Raspberry Pi can be connected to network successfully!
+Source : https://raspberrypi.stackexchange.com/questions/89803/access-point-as-wifi-router-repeater-optional-with-bridge
+along with https://raspberrypi.stackexchange.com/questions/108592/use-systemd-networkd-for-general-networking/108593#108593
 
 * Run updates, and reboot before starting any config
 
     >$ sudo su
-    >$ apt update && apt full-upgrade 
+    >$ apt update && apt full-upgrade
     >$ reboot
 
 * Ensure the required python apt packages are installed and pointed to correctly! (this system uses Python 3.7)
 
     >$ sudo su
-    >$ apt-get install python3.7 python3-pip python3-venv 
+    >$ apt-get install python3.7 python3-pip python3-venv  
 
 * To login as root at boot, edit this line at /lib/systemd/system/getty@.service
 
@@ -22,27 +23,32 @@ This TODO will explain the steps required to setup the Raspberry Pi as Gateway/C
     Into:
         ExecStart=-/sbin/getty/ --noclear -a root %I $TERM
 
-* Probably need to remove root password :
+    Remove root password if necessary
 
     >$ sudo nano /etc/passwd
-
+    
     Make sure that there are no 'x' at the line that specifies the root account
 
-1. run "sudo raspi-config"
+* Also, sometimes the RFKill might just prevent the wireless interface from connecting
+
+    >$ sudo su
+    >$ ifconfig #check whether the wireless interface is in up status
+    >$ rfkill list # Check whether the wireless interface is soft blocked or not
+
+    If it is softblocked:
+
+    >$ rfkill unblock wifi
+    >$ rfkill list #check again
+    >$ ifconfig [interface_name, usually wlan0] up 
+
+* From here on, everything will be run as root
+
+1. run "raspi-config"
 2. Update the raspi-config tool
 3. Change "pi" user password to "teknik_komputer"
 4. Change device hostname to "raspberrypi-[gw/ed]-[2 digit number]"
 5. Set predictable interface names
 6. Activate SSH (just in case)
-
-* From here on, everything will be run as root
- 
-7. Change root password to "root"
-note: Default password for "pi" is "raspberry", and "root" has no default password
-
-    >$ sudo su
-    >$ passwd  # shell will immediately prompt new password (because no password by default)
-
 8. Configure network settings to use systemd-networkd
 
     >$ sudo su 
@@ -71,7 +77,7 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
             #Domains=
             LLMNR=yes
             MulticastDNS=yes
-            DNSSEC=allow-downgrade
+            DNSSEC=no
             #DNSOverTLS=no
             #Cache=yes
             DNSStubListener=yes
@@ -80,14 +86,41 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
         >$ systemctl restart systemd-resolved.service
         >$ systemctl status systemd-resolved.service
 
+        *Also, it would seem like we need to run systemctl daemon-reload everytime resolved is startec
+        *Simply, we can run the command on every boot by adding the command to /etc/rc.local
+
+        >$ sudo nano /etc/rc.local
+
+        Append "sudo systemctl daemon-reload" before the exit 0 command
+
     e. Make sure D-Bus software interface is running
         >$ systemctl status dbus.service
-        >$ systemctl enable dbus.service # starts it if not running
 
-    f. Continued in step 14...
+    f. Setup static interface for WiFi Client and reboot
+
+        >$ mv /etc/wpa_supplicant/wpa_supplicant.conf /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+        >$ systemctl disable wpa_supplicant.service
+        >$ systemctl enable wpa_supplicant@wlan0.service
+
+        >$ nano /etc/systemd/network/08-wlan0.network # prompts an empty text editor
+
+        Append the text below to the new file: (continuation of step 8e)
+
+            [Match]
+            Name=wlan0
+            [Network]
+            IPForward=yes
+            DHCP=yes
+            MulticastDNS=yes
+
+        >$ reboot
+
+    g. Check with this command and verify that it matches the config in step d
+        >$ resolvectl status
 
     Failure in fully migrating might mess with the name resolution 
-    (especially problematic when SSH with hostname)
+
+** Make sure RPi can connect to network properly up to this point (Gets DHCP Address, can ping to 8.8.8.8 and 1.1.1.1 without problem)
 
 9. Install and start hostapd
 
@@ -95,29 +128,7 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
     >$ systemctl unmask hostapd
     >$ systemctl enable hostapd
 
-10. Disable the default debian networking and dhcpcd services
-
-    >$ systemctl mask networking.service dhcpcd.service
-    >$ mv /etc/network/interfaces /etc/network/interfaces~
-    >$ sed -i '1i resolvconf=NO' /etc/resolvconf.conf
-
-11. Make sure systemd.networkd and system.resolved is running
-    note: run the "systemctl enable xxx" command only if the service is not running!
-
-    >$ systemctl status systemd-networkd.service 
-    >$ systemctl enable systemd-networkd.service 
-    >$ systemctl status systemd-networkd.service 
-    >$ systemctl enable systemd-resolved.service
-    >$ ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
-
-    *Also, it would seem like we need to run systemctl daemon-reload everytime resolved is startec
-    *Simply, we can run the command on every boot by adding the command to /etc/rc.local
-
-    >$ sudo nano /etc/rc.local
-    
-    Append "sudo systemctl daemon-reload" before the exit 0 command
-
-12. Setup hostapd for Access Point (replace the parameters in square brackets with the appropriate value)
+10. Setup hostapd for Access Point (replace the parameters in square brackets with the appropriate value)
     note: check the channel used in wlan0 or whatever wireless interface is currently connected to internet
 
     >$ iwlist channel  # Check the appropriate interface, and look at the Current Frequency Channel value
@@ -133,7 +144,7 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
         channel=[insert_channel_value]
         auth_algs=1
         wpa=2
-        wpa_passphrase=[your_ap_pass_here]
+        wpa_passphrase=[your_ap_password]
         wpa_key_mgmt=WPA-PSK
         wpa_pairwise=TKIP
         rsn_pairwise=CCMP
@@ -156,16 +167,10 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
         ExecStartPre=/sbin/iw dev wlan0 interface add ap0 type __ap
         ExecStopPost=-/sbin/iw dev ap0 del
 
-13. Setup wpa_supplicant.conf
-    note: you can create a new one, or make a copy of the original wpa_supplicant and add to it
-
-    >$ nano /etc/wpa_supplicant/wpa_supplicant-wlan0.conf # for creating a new one
-        OR
-    >$ cp /etc/wpa_supplicant/wpa_supplicant.conf /etc/wpa_supplicant/wpa_supplicant-wlan0.conf # for copying
+11. Setup wpa_supplicant.conf (this is a continuation of step 8f)
 
     >$ chmod 600 /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
-    >$ systemctl disable wpa_supplicant.service
-    >$ systemctl enable wpa_supplicant@wlan0.service
+    >$ rfkill unblock 0
     >$ systemctl edit wpa_supplicant@wlan0.service
 
     The last command will prompt a text editor showing an empty file. Append these:
@@ -178,18 +183,7 @@ note: Default password for "pi" is "raspberry", and "root" has no default passwo
         ExecStartPost=/sbin/iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
         ExecStopPost=-/sbin/iptables -t nat -D POSTROUTING -o wlan0 -j MASQUERADE
 
-14. Setup static interfaces and reboot
-
-    >$ nano /etc/systemd/network/08-wlan0.network # prompts an empty text editor
-
-    Append the text below to the new file: (continuation of step 8e)
-
-        [Match]
-        Name=wlan0
-        [Network]
-        IPForward=yes
-        DHCP=yes
-        MulticastDNS=yes
+12. Setup static interface for AP and reboot
 
     >$ nano /etc/systemd/network/12-ap0.network # prompts an empty text editor
 
