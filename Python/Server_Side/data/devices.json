@@ -1,34 +1,4 @@
 {
     "data": [
-        {
-            "cluster": null,
-            "gateway": "0xE66E2011",
-            "id": "target_device_x01",
-            "type": "ESP"
-        },
-        {
-            "cluster": "target_cluster_x01",
-            "gateway": "0xE66E2011",
-            "id": "target_device_x02",
-            "type": "ESP"
-        },
-        {
-            "cluster": "target_cluster_x01",
-            "gateway": "0xE66E2011",
-            "id": "target_device_x03",
-            "type": "ESP"
-        },
-        {
-            "cluster": "target_cluster_x01",
-            "gateway": null,
-            "id": "target_device_x04",
-            "type": null
-        },
-        {
-            "cluster": null,
-            "gateway": "0x8B4F6E16",
-            "id": "target_device_y01",
-            "type": "RPi"
-        }
     ]
 }

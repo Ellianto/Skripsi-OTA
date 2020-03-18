@@ -2,7 +2,16 @@ USE THIS COMMAND FOR REMOTE COMMAND EXECUTION via SSH! (needs putty's plink)
 
 plink pi@raspberrypigw01 -pw teknik_komputer "rm /home/pi/gateway_code/test.txt;"
 
+Alternatively, install sshpass and use it
+
+sudo apt-get install sshpass
+sshpass -p [password] ssh pi@[hostname or host_ip] "[commands]"
+sshpass -p [password] scp ./blablabla.txt pi@[hostname or host_ip]:/home/....
+
 Create venv in Raspberry Pi using this command:
 
 python3 -m venv [dir_name]
 Run it as pi user so it can be modified via SSH FS
+
+Cleaning up SSH Cache
+ssh-keygen -R [host_ip or host_name]
