@@ -14,7 +14,6 @@ from signal import SIGTERM
 import psutil
 
 import constants
-import requests
 
 
 # File Handling Section

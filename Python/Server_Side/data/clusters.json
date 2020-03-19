@@ -6,9 +6,11 @@
                 "target_device_y02",
                 "target_device_y03"
             ],
-            "gateways": [],
+            "gateways": [
+                "0x53BD3589"
+            ],
             "id": "target_cluster_y01",
-            "type": null
+            "type": "RPi"
         },
         {
             "devices": [

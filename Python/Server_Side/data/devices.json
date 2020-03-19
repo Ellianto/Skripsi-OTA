@@ -2,21 +2,21 @@
     "data": [
         {
             "cluster": "target_cluster_y01",
-            "gateway": null,
+            "gateway": "0x53BD3589",
             "id": "target_device_y01",
-            "type": null
+            "type": "RPi"
         },
         {
             "cluster": "target_cluster_y01",
-            "gateway": null,
+            "gateway": "0x53BD3589",
             "id": "target_device_y02",
-            "type": null
+            "type": "RPi"
         },
         {
             "cluster": "target_cluster_y01",
-            "gateway": null,
+            "gateway": "0x53BD3589",
             "id": "target_device_y03",
-            "type": null
+            "type": "RPi"
         },
         {
             "cluster": "target_cluster_x01",

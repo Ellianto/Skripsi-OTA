@@ -121,6 +121,7 @@ class MyTCPHandler(socketserver.StreamRequestHandler):
 
                 # Don't forget to subscribe to required topic
                 if device_data['cluster'] is not None:
+                    print('Subscribing to cluster topic...')
                     mqtt_client.subscribe('ota/cluster/' + device_data['cluster'], qos=2)
                 
                 # Reply Back to client
@@ -179,6 +180,7 @@ def init_conf(retries=0):
                     raise requests.HTTPError
 
             conf_ready = True
+
 
         except requests.HTTPError:
             print(constants.messages.HTTP_ERROR_MESSAGE)
@@ -561,6 +563,13 @@ def on_mqtt_connect(client, userdata, flags, rc):
             ]
 
             client.publish(configuration['mqtt_topic'], constants.network.CMD_MSG_SEPARATOR.join(active_msg).encode(), qos=2)
+
+            with constants.paths.CLUSTERS_FILE_PATH.open() as clusters_file:
+                clusters = json.load(clusters_file)
+                if len(clusters['data']) > 0:
+                    for cluster in clusters['data']:
+                        print('Subscribed to Cluster topic : ' + cluster['id'])
+                        client.subscribe('ota/cluster/' + cluster['id'], qos=2)
     
     if rc in range(len(constants.mqtt.RETURN_CODE_MESSAGES)):
         print(constants.mqtt.RETURN_CODE_MESSAGES[rc])
