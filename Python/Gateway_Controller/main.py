@@ -7,6 +7,7 @@ import sys
 import time
 from pathlib import Path
 from subprocess import PIPE
+import timeit
 
 import psutil
 
@@ -580,10 +581,13 @@ def on_mqtt_message(client, userdata, msg):
         messages = ['Success!', 'Some target clients failed to connect!', 'Data Transfer not successful!']
 
         for attempts in range(3):
+            start = timeit.default_timer()
             return_code = multicast_update(target_id, is_cluster=(str(mqtt_message[1]) == 'cluster'))
             print('Multicast Firmware Update returns ' + str(return_code))
             print(messages[return_code])
+
             if return_code in [0]:
+                print('Multicast Update completed in ' + str(timeit.default_timer() - start) + ' seconds')
                 break
 
     elif mqtt_message[0] == constants.mqtt.DEVICE_CODE:

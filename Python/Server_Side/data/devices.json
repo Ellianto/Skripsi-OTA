@@ -1,4 +1,46 @@
 {
     "data": [
+        {
+            "cluster": "target_cluster_y01",
+            "gateway": null,
+            "id": "target_device_y01",
+            "type": null
+        },
+        {
+            "cluster": "target_cluster_y01",
+            "gateway": null,
+            "id": "target_device_y02",
+            "type": null
+        },
+        {
+            "cluster": "target_cluster_y01",
+            "gateway": null,
+            "id": "target_device_y03",
+            "type": null
+        },
+        {
+            "cluster": "target_cluster_x01",
+            "gateway": null,
+            "id": "target_device_x01",
+            "type": null
+        },
+        {
+            "cluster": "target_cluster_x01",
+            "gateway": null,
+            "id": "target_device_x02",
+            "type": null
+        },
+        {
+            "cluster": "target_cluster_x01",
+            "gateway": null,
+            "id": "target_device_x03",
+            "type": null
+        },
+        {
+            "cluster": "target_cluster_x01",
+            "gateway": null,
+            "id": "target_device_x04",
+            "type": null
+        }
     ]
 }

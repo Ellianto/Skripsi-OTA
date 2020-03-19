@@ -4,6 +4,8 @@ from voluptuous import MultipleInvalid, Required, Schema
 from server import app, constants, mqtt_client
 from server.internal_handlers import file_io, helpers, uftp_handlers
 
+import timeit
+
 
 @app.route('/list/devices/', methods=['GET'])
 def get_devices():
@@ -115,9 +117,11 @@ def ota_device():
             status_response['status'] = constants.strings.STATUS_CODE_UNINITIALIZED
             status_response['message'] = 'Device has not been initialized!'
         else:
+            start = timeit.default_timer()
             status_response = uftp_handlers.distribute_updated_code(target_device['id'])
 
             if status_response['status'] == constants.strings.STATUS_CODE_SUCCESS:
+                print('Code Transfer succeeded in ' + str(timeit.default_timer() - start) + ' seconds')
                 target_topic = constants.mqtt.CLUSTER_TOPIC + '/' + target_device['cluster'] if target_device['cluster'] is not None else constants.mqtt.GLOBAL_TOPIC
 
                 mqtt_client.publish(target_topic, 'update|device|' + target_device['id'], qos=2)
@@ -146,11 +150,13 @@ def ota_cluster():
             status_response['status'] = constants.strings.STATUS_CODE_UNINITIALIZED
             status_response['message'] = 'Cluster has not been initialized!'
         else:
+            # TODO: Measure time here
+            start = timeit.default_timer()
             status_response = uftp_handlers.distribute_updated_code(
                 target_cluster['id'], is_cluster=True)
 
             if status_response['status'] == constants.strings.STATUS_CODE_SUCCESS:
-
+                print('Code Transfer succeeded in ' + str(timeit.default_timer() - start) + ' seconds')
                 mqtt_client.publish(constants.mqtt.CLUSTER_TOPIC + '/' +
                             target_cluster['id'], 'update|cluster|' + target_cluster['id'], qos=2)
     except MultipleInvalid:

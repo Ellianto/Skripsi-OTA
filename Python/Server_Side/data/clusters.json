@@ -1,4 +1,25 @@
 {
     "data": [
+        {
+            "devices": [
+                "target_device_y01",
+                "target_device_y02",
+                "target_device_y03"
+            ],
+            "gateways": [],
+            "id": "target_cluster_y01",
+            "type": null
+        },
+        {
+            "devices": [
+                "target_device_x01",
+                "target_device_x02",
+                "target_device_x03",
+                "target_device_x04"
+            ],
+            "gateways": [],
+            "id": "target_cluster_x01",
+            "type": null
+        }
     ]
 }
