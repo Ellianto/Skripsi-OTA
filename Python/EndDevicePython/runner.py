@@ -118,11 +118,16 @@ def check_free_space(file_size):
 def receive_multicast_data(mcast_socket, file_size, buf_size=1024):
     with constants.paths.TEMP_DATA_FILE.open(mode='wb') as file:
         total = 0
+        mcast_socket.settimeout(2)
 
         while total < file_size:
-            file_data, incoming_addr = mcast_socket.recvfrom(buf_size)
-            file.write(file_data)
-            total += len(file_data)
+            try:
+                file_data, incoming_addr = mcast_socket.recvfrom(buf_size)
+                file.write(file_data)
+                total += len(file_data)
+            except sock.timeout:
+                print('Timed out while receiving data!')
+                break
 
     return total
 
@@ -227,6 +232,12 @@ def handle_ota_update(gateway_params, device_info):
                 data_buf_size = int(transfer_messages[3])
                 server_checksum = str(transfer_messages[2])
                 file_received_len = receive_multicast_data(data_multicast_socket, file_size, data_buf_size)
+
+                if file_received_len != file_size:
+                    print('Failed to receive file!')
+                    if constants.paths.TEMP_DATA_FILE.exists() is True:
+                        constants.paths.TEMP_DATA_FILE.unlink()
+                    continue
 
                 #! **VERIFICATION PHASE**
                 #! Poll until checksum/abort command
