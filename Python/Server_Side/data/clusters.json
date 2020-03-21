@@ -19,9 +19,12 @@
                 "target_device_x03",
                 "target_device_x04"
             ],
-            "gateways": [],
+            "gateways": [
+                "0x9EC8EE53",
+                "0x23BB0AF8"
+            ],
             "id": "target_cluster_x01",
-            "type": null
+            "type": "ESP"
         }
     ]
 }

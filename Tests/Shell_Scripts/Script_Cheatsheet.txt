@@ -15,3 +15,6 @@ Run it as pi user so it can be modified via SSH FS
 
 Cleaning up SSH Cache
 ssh-keygen -R [host_ip or host_name]
+
+Measure the execution time of a Linux shell script with 'time' command
+time [shell script to run]

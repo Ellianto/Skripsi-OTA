@@ -2,13 +2,13 @@
     "data": [
         {
             "cluster": "target_cluster_y01",
-            "gateway": "0x53BD3589",
+            "gateway": "0x9EC8EE53",
             "id": "target_device_y01",
             "type": "RPi"
         },
         {
             "cluster": "target_cluster_y01",
-            "gateway": "0x53BD3589",
+            "gateway": "0x23BB0AF8",
             "id": "target_device_y02",
             "type": "RPi"
         },
@@ -20,27 +20,27 @@
         },
         {
             "cluster": "target_cluster_x01",
-            "gateway": null,
+            "gateway": "0x9EC8EE53",
             "id": "target_device_x01",
-            "type": null
+            "type": "ESP"
         },
         {
             "cluster": "target_cluster_x01",
-            "gateway": null,
+            "gateway": "0x23BB0AF8",
             "id": "target_device_x02",
-            "type": null
+            "type": "ESP"
         },
         {
             "cluster": "target_cluster_x01",
-            "gateway": null,
+            "gateway": "0x9EC8EE53",
             "id": "target_device_x03",
-            "type": null
+            "type": "ESP"
         },
         {
             "cluster": "target_cluster_x01",
-            "gateway": null,
+            "gateway": "0x9EC8EE53",
             "id": "target_device_x04",
-            "type": null
+            "type": "ESP"
         }
     ]
 }

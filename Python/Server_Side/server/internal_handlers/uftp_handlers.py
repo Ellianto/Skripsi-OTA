@@ -13,8 +13,6 @@ For example, with the default BASE_DIR (./data/) and target cluster ID of "examp
 ./data/cluster/example_cluster
 """
 
-def compress_to_zip():
-    pass
 
 def check_uftp_server_instance():
     proc_name = 'uftp.exe'
@@ -125,10 +123,7 @@ def parse_status_file():
 def run_uftp_server(gateway_ids, target_file, retries=2):
     session_list = []
     success = None
-    hostlist = ','.join(gateway_id[2:] for gateway_id in gateway_ids)
-
-    if len(gateway_ids) > 1:
-        hostlist = '"' + hostlist + '"'
+    hostlist = ','.join(gateway_id for gateway_id in gateway_ids)
 
     for attempts in range(retries):
         message = ''
@@ -137,6 +132,8 @@ def run_uftp_server(gateway_ids, target_file, retries=2):
         try:
             with psutil.Popen(constants.uftp.UFTP_SERVER_CMD + [hostlist, target_file]) as uftp_server:
                 return_code = uftp_server.wait(timeout=constants.uftp.PROCESS_TIMEOUT)
+
+            print("UFTP Server returned " + str(return_code))
 
             if return_code in [1, 2, 3, 4, 5, 6, 9]:
                 message = 'An error occurred!'

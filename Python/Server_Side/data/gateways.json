@@ -2,10 +2,17 @@
     "data": [
         {
             "cluster": [
-                "target_cluster_y01"
+                "target_cluster_x01"
             ],
             "device": [],
-            "id": "0x53BD3589"
+            "id": "0x9EC8EE53"
+        },
+        {
+            "cluster": [
+                "target_cluster_x01"
+            ],
+            "device": [],
+            "id": "0x23BB0AF8"
         }
     ]
 }

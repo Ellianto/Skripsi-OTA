@@ -25,11 +25,11 @@ bool saveConfig(){
   StaticJsonDocument<STATIC_JSON_SIZE> device;
 
   //Modify the JSON keys and values here
-  device["id"] = "target_device_x03";
+  device["id"] = "target_device_x04";
   device["type"] = DEVICE_TYPE;
   device["cluster"] = "target_cluster_x01";
-  device["ssid"] = "PI_GW_01";
-  device["passwd"] = "teknik_komputer";
+  device["ssid"] = "otnaille";
+  device["passwd"] = "thisissparta";
   device["tcp_gw_port"] = 6666;
 
   File configFile = SPIFFS.open(JSON_FILE_NAME, "w");
