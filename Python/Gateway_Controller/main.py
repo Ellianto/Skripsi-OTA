@@ -542,6 +542,7 @@ def multicast_update(target_id, is_cluster=False):
 
     send_mcast_cmd(apply_update_msg, cmd_mcast_group)
     time.sleep(3)
+
     #! To force stop any "hanging clients"
     # send_mcast_cmd(abort_msg, cmd_mcast_group)
     return 0
@@ -588,6 +589,7 @@ def on_mqtt_message(client, userdata, msg):
 
         attempts = 0
         messages = ['Success!', 'Some target clients failed to connect!', 'Data Transfer not successful!']
+        mqtt_reply = ['update', target_id, 'failed']
 
         for attempts in range(3):
             start = timeit.default_timer()
@@ -597,8 +599,11 @@ def on_mqtt_message(client, userdata, msg):
 
             if return_code in [0]:
                 print('Multicast Update completed in ' + str(timeit.default_timer() - start) + ' seconds')
+                mqtt_reply[2] = 'success'
                 break
 
+        client.publish(msg.topic, constants.network.CMD_MSG_SEPARATOR.join(mqtt_reply).encode(), qos=2)
+        
     elif mqtt_message[0] == constants.mqtt.DEVICE_CODE:
         pass
 
