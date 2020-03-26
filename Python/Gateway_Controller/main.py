@@ -278,7 +278,7 @@ def init_multicast():
     try:
         cmd_mcast_socket = sock.socket(sock.AF_INET, sock.SOCK_DGRAM)
         cmd_mcast_socket.bind((constants.network.AP_ADDRESS, int(cmd_mcast_port)))
-        cmd_mcast_socket.settimeout(15.0)
+        cmd_mcast_socket.settimeout(5.0)
         # cmd_mcast_socket.bind(('', int(cmd_mcast_port)))
 
     except sock.error:
@@ -435,6 +435,7 @@ def multicast_update(target_id, is_cluster=False):
     clients_ok = False
     clients_replied = []
     buffer_limit = 1470 # Try and experiment to adjust this value to the optimum
+    # 1475 = Fragmented IP Protocol
     # 1470 can still do without getting fragmented
     # 1460 is the MTU value
     # 1024 can do
@@ -498,7 +499,6 @@ def multicast_update(target_id, is_cluster=False):
 
     #! Close Data Socket
     data_mcast_socket.close()
-    time.sleep(0.5)
 
     #! **VERIFICATION PHASE**
     #! Poll for client response
@@ -541,7 +541,7 @@ def multicast_update(target_id, is_cluster=False):
     ]
 
     send_mcast_cmd(apply_update_msg, cmd_mcast_group)
-    time.sleep(3)
+    time.sleep(1)
 
     #! To force stop any "hanging clients"
     # send_mcast_cmd(abort_msg, cmd_mcast_group)
